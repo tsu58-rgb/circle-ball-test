@@ -1,1 +1,104 @@
-<!doctype html><meta charset="utf-8"><title>迷路＋落とし穴レース</title><script>(async()=>{try{const u="https://raw.githubusercontent.com/tsu58-rgb/circle-ball-test/afbced1c4a05c30e5986fb205bb9d92191778eff/game2.html";let h=await(await fetch(u,{cache:"no-store"})).text();h=h.replace("gain.gain.setValueAtTime(.18,now)","gain.gain.setValueAtTime(.95,now)").replace("master.gain.setValueAtTime(.12,now)","master.gain.setValueAtTime(.90,now)").replace("g.gain.setValueAtTime(.15,now)","g.gain.setValueAtTime(.85,now)").replace("g.gain.setValueAtTime(.10,now+i*.07)","g.gain.setValueAtTime(.75,now+i*.07)");document.open();document.write(h);document.close()}catch(e){document.body.textContent="読み込みに失敗しました"}})()</script>
+<!doctype html><meta charset="utf-8"><title>迷路＋落とし穴レース</title><script>
+(async()=>{
+  try{
+    const u="https://raw.githubusercontent.com/tsu58-rgb/circle-ball-test/afbced1c4a05c30e5986fb205bb9d92191778eff/game2.html";
+    let h=await(await fetch(u,{cache:"no-store"})).text();
+
+    const properMaze=`
+  const MAZE_COLS=12,MAZE_ROWS=8,MAZE_MX=28,MAZE_MY=28;
+  const MAZE_CW=(1000-MAZE_MX*2)/MAZE_COLS;
+  const MAZE_CH=(650-MAZE_MY*2)/MAZE_ROWS;
+  const MAZE_WALL=10;
+
+  function mazeRand(seed){
+    let x=seed>>>0;
+    return ()=>{x=(x*1664525+1013904223)>>>0;return x/4294967296};
+  }
+  function mazeIndex(c,r){return r*MAZE_COLS+c}
+  function buildProperMaze(){
+    const rand=mazeRand(20260822);
+    const cells=Array.from({length:MAZE_COLS*MAZE_ROWS},()=>({n:true,e:true,s:true,w:true,v:false}));
+    const stack=[{c:0,r:MAZE_ROWS-1}];
+    cells[mazeIndex(0,MAZE_ROWS-1)].v=true;
+    const dirs=[
+      {dc:0,dr:-1,a:'n',b:'s'},
+      {dc:1,dr:0,a:'e',b:'w'},
+      {dc:0,dr:1,a:'s',b:'n'},
+      {dc:-1,dr:0,a:'w',b:'e'}
+    ];
+
+    while(stack.length){
+      const cur=stack[stack.length-1],opts=[];
+      for(const d of dirs){
+        const nc=cur.c+d.dc,nr=cur.r+d.dr;
+        if(nc<0||nc>=MAZE_COLS||nr<0||nr>=MAZE_ROWS)continue;
+        if(!cells[mazeIndex(nc,nr)].v)opts.push({...d,nc,nr});
+      }
+      if(!opts.length){stack.pop();continue}
+      const d=opts[Math.floor(rand()*opts.length)];
+      const a=cells[mazeIndex(cur.c,cur.r)],b=cells[mazeIndex(d.nc,d.nr)];
+      a[d.a]=false;b[d.b]=false;b.v=true;
+      stack.push({c:d.nc,r:d.nr});
+    }
+
+    const walls=[];
+    walls.push({x:MAZE_MX-MAZE_WALL/2,y:MAZE_MY-MAZE_WALL/2,w:MAZE_COLS*MAZE_CW+MAZE_WALL,h:MAZE_WALL});
+    walls.push({x:MAZE_MX-MAZE_WALL/2,y:MAZE_MY+MAZE_ROWS*MAZE_CH-MAZE_WALL/2,w:MAZE_COLS*MAZE_CW+MAZE_WALL,h:MAZE_WALL});
+    walls.push({x:MAZE_MX-MAZE_WALL/2,y:MAZE_MY-MAZE_WALL/2,w:MAZE_WALL,h:MAZE_ROWS*MAZE_CH+MAZE_WALL});
+    walls.push({x:MAZE_MX+MAZE_COLS*MAZE_CW-MAZE_WALL/2,y:MAZE_MY-MAZE_WALL/2,w:MAZE_WALL,h:MAZE_ROWS*MAZE_CH+MAZE_WALL});
+
+    for(let r=0;r<MAZE_ROWS;r++){
+      for(let c=0;c<MAZE_COLS;c++){
+        const cell=cells[mazeIndex(c,r)],x=MAZE_MX+c*MAZE_CW,y=MAZE_MY+r*MAZE_CH;
+        if(c<MAZE_COLS-1&&cell.e)walls.push({x:x+MAZE_CW-MAZE_WALL/2,y:y-MAZE_WALL/2,w:MAZE_WALL,h:MAZE_CH+MAZE_WALL});
+        if(r<MAZE_ROWS-1&&cell.s)walls.push({x:x-MAZE_WALL/2,y:y+MAZE_CH-MAZE_WALL/2,w:MAZE_CW+MAZE_WALL,h:MAZE_WALL});
+      }
+    }
+
+    const si=mazeIndex(0,MAZE_ROWS-1),gi=mazeIndex(MAZE_COLS-1,0);
+    const q=[si],prev=new Array(MAZE_COLS*MAZE_ROWS).fill(-1);prev[si]=si;
+    while(q.length){
+      const i=q.shift();if(i===gi)break;
+      const c=i%MAZE_COLS,r=Math.floor(i/MAZE_COLS),cell=cells[i],next=[];
+      if(!cell.n)next.push([c,r-1]);if(!cell.e)next.push([c+1,r]);if(!cell.s)next.push([c,r+1]);if(!cell.w)next.push([c-1,r]);
+      for(const [nc,nr] of next){
+        if(nc<0||nc>=MAZE_COLS||nr<0||nr>=MAZE_ROWS)continue;
+        const ni=mazeIndex(nc,nr);if(prev[ni]!==-1)continue;prev[ni]=i;q.push(ni);
+      }
+    }
+    const solution=new Set();let cur=gi;
+    while(cur!==si&&cur!==-1){solution.add(cur);cur=prev[cur]}solution.add(si);
+
+    const candidates=[];
+    for(let r=0;r<MAZE_ROWS;r++)for(let c=0;c<MAZE_COLS;c++){
+      const i=mazeIndex(c,r);if(solution.has(i))continue;
+      const cell=cells[i],open=[!cell.n,!cell.e,!cell.s,!cell.w].filter(Boolean).length;
+      if(open<=2)candidates.push({c,r});
+    }
+    const holes=[];
+    for(let k=0;k<Math.min(7,candidates.length);k++){
+      const n=Math.floor(rand()*candidates.length),z=candidates.splice(n,1)[0];
+      holes.push({x:MAZE_MX+(z.c+.5)*MAZE_CW,y:MAZE_MY+(z.r+.5)*MAZE_CH,r:21});
+    }
+    return {walls,holes};
+  }
+  const properMaze=buildProperMaze();
+  const walls=properMaze.walls;
+  const holes=properMaze.holes;
+`;
+
+    h=h.replace(/const walls=\[[\s\S]*?\];\s*const holes=\[[\s\S]*?\];/,properMaze);
+
+    h=h.replace("gain.gain.setValueAtTime(.18,now)","gain.gain.setValueAtTime(.95,now)")
+       .replace("master.gain.setValueAtTime(.12,now)","master.gain.setValueAtTime(.90,now)")
+       .replace("g.gain.setValueAtTime(.15,now)","g.gain.setValueAtTime(.85,now)")
+       .replace("g.gain.setValueAtTime(.10,now+i*.07)","g.gain.setValueAtTime(.75,now+i*.07)")
+       .replaceAll("ctx.fillStyle='#4f5968'","ctx.fillStyle='#333943'")
+       .replaceAll("g.fillStyle='#4f5968'","g.fillStyle='#333943'");
+
+    document.open();document.write(h);document.close();
+  }catch(e){
+    document.body.textContent="読み込みに失敗しました: "+e.message;
+  }
+})();
+</script>
