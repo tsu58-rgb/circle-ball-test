@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>迷路＋落とし穴レース</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d1015;color:#fff}
+button,input,select{font:inherit}
+button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}
+.hidden{display:none!important}
+.panel{max-width:760px;margin:0 auto;padding:18px}
+.card{background:#1a1f27;border:1px solid #303744;border-radius:14px;padding:16px;margin:12px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 160px}
+select{width:100%;padding:12px;border-radius:10px;border:1px solid #39404d;background:#11151b;color:#fff}
+.primary{background:#fff;color:#111}
+.secondary{background:#2a303b;color:#fff}
+.status{padding:10px 12px;border-radius:10px;background:#11151b;margin-top:10px}
+#host{position:relative;height:100vh;overflow:hidden;background:#080b0f}
+#game{position:absolute;inset:0;width:100%;height:100%;display:block}
+#hud{position:absolute;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.65);padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5}
+#hostButtons{position:absolute;right:12px;top:12px;z-index:5;display:flex;gap:8px}
+#overlay{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4);text-align:center}
+#overlayBox{background:rgba(0,0,0,.82);padding:22px 28px;border-radius:16px}
+#overlayTitle{font-size:30px;font-weight:900}
+#controller .badge{font-size:30px;font-weight:900;text-align:center;background:#24486f;padding:14px;border-radius:14px}
+#pad{height:180px;margin-top:12px;border-radius:20px;background:#151922;border:1px solid #2d3440;position:relative}
+#dot{width:32px;height:32px;border-radius:50%;background:#fff;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+.small{font-size:12px;color:#b8bec8}
+</style>
+</head>
+<body>
+
+<section id="home">
+  <div class="panel">
+    <h1>迷路＋落とし穴レース</h1>
+    <div class="card">
+      <p>PCはゲーム本体、スマホはコントローラーです。最大10人が同じ迷路を同時に走ります。</p>
+      <div class="row">
+        <button id="openHost" class="primary">PC：ゲーム本体</button>
+        <button id="openController" class="secondary">スマホ：参加する</button>
+      </div>
+      <p><a href="./index.html" style="color:#fff">← ゲーム一覧へ戻る</a></p>
+    </div>
+  </div>
+</section>
+
+<section id="controller" class="hidden">
+  <div class="panel">
+    <h2>スマホコントローラー</h2>
+    <div id="joinCard" class="card">
+      <label for="numSelect">自分の番号</label>
+      <select id="numSelect">
+        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+        <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+      </select>
+      <button id="connectBtn" class="primary" style="width:100%;margin-top:12px">共通迷路に参加</button>
+      <div id="connectStatus" class="status">未接続</div>
+    </div>
+
+    <div id="controlCard" class="card hidden">
+      <div id="badge" class="badge">PLAYER</div>
+      <button id="sensorBtn" class="primary" style="width:100%;margin-top:12px">傾きセンサーを開始</button>
+      <button id="recalibrateBtn" class="secondary" style="width:100%;margin-top:8px">今の角度を水平基準にする</button>
+      <div id="tilt" class="status">左右 0.0° / 前後 0.0°</div>
+      <div id="wakeStatus" class="status">画面スリープ防止：未開始</div>
+      <div id="pad"><div id="dot"></div></div>
+      <p class="small">穴に落ちるとスタートへ戻ります。ほかのボールともぶつかります。</p>
+    </div>
+  </div>
+</section>
+
+<section id="host" class="hidden">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div><strong>共通迷路・接続受付中</strong></div>
+    <div id="count">参加者 0/10</div>
+    <div id="ranking">ゴール：なし</div>
+  </div>
+  <div id="hostButtons">
+    <button id="resetBtn">リセット</button>
+    <button id="startBtn">レース開始</button>
+    <button id="backBtn" class="secondary">一覧へ</button>
+  </div>
+  <div id="overlay">
+    <div id="overlayBox">
+      <div id="overlayTitle"></div>
+      <div id="overlayText"></div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+(()=>{
+const home=document.getElementById('home'),host=document.getElementById('host'),controller=document.getElementById('controller');
+const openHost=document.getElementById('openHost'),openController=document.getElementById('openController');
+const params=new URLSearchParams(location.search),mode=params.get('mode');
+function show(el){home.classList.add('hidden');host.classList.add('hidden');controller.classList.add('hidden');el.classList.remove('hidden')}
+openHost.onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=host');show(host);initHost()};
+openController.onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=controller');show(controller)};
+if(mode==='host'){show(host);setTimeout(initHost,0)}else if(mode==='controller')show(controller);
+document.getElementById('backBtn').onclick=()=>location.href='./index.html';
+
+const FIXED_ROOM='yuru-maze-race-main';
+const numSelect=document.getElementById('numSelect'),connectBtn=document.getElementById('connectBtn'),connectStatus=document.getElementById('connectStatus');
+const joinCard=document.getElementById('joinCard'),controlCard=document.getElementById('controlCard'),badge=document.getElementById('badge');
+const sensorBtn=document.getElementById('sensorBtn'),recalibrateBtn=document.getElementById('recalibrateBtn'),tilt=document.getElementById('tilt');
+const dot=document.getElementById('dot'),wakeStatus=document.getElementById('wakeStatus');
+
+let cPeer=null,cConn=null,selectedNumber=null,sensorActive=false,rawGamma=0,rawBeta=0,baseGamma=0,baseBeta=0,lastSend=0,wakeLock=null,reconnectTimer=null;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const delta=(v,b)=>{let d=v-b;while(d>180)d-=360;while(d<-180)d+=360;return d};
+
+async function wake(){
+  if(!('wakeLock' in navigator)){wakeStatus.textContent='画面スリープ防止：端末非対応';return}
+  try{
+    if(wakeLock&&!wakeLock.released){wakeStatus.textContent='画面スリープ防止：ON';return}
+    wakeLock=await navigator.wakeLock.request('screen');
+    wakeStatus.textContent='画面スリープ防止：ON';
+  }catch(e){wakeStatus.textContent='画面スリープ防止：利用できません'}
+}
+function orientation(e){
+  if(typeof e.gamma==='number')rawGamma=e.gamma;
+  if(typeof e.beta==='number')rawBeta=e.beta;
+  if(!sensorActive||!cConn?.open)return;
+  const now=performance.now(); if(now-lastSend<33)return; lastSend=now;
+  const x=clamp(delta(rawGamma,baseGamma),-30,30),y=clamp(delta(rawBeta,baseBeta),-30,30);
+  tilt.textContent=`左右 ${x.toFixed(1)}° / 前後 ${y.toFixed(1)}°`;
+  dot.style.transform=`translate(calc(-50% + ${x/30*62}px),calc(-50% + ${y/30*62}px))`;
+  cConn.send({type:'tilt',x:x/30,y:y/30});
+}
+function ensureSensor(){removeEventListener('deviceorientation',orientation,true);addEventListener('deviceorientation',orientation,true)}
+function connect(retry=false){
+  selectedNumber=selectedNumber||Number(numSelect.value);
+  try{cConn?.close()}catch(e){}
+  try{cPeer?.destroy()}catch(e){}
+  connectStatus.textContent=retry?'再接続中...':'接続中...';
+  cPeer=new Peer();
+  cPeer.on('open',()=>{
+    cConn=cPeer.connect(FIXED_ROOM,{reliable:true});
+    cConn.on('open',async()=>{
+      cConn.send({type:'join',number:selectedNumber});
+      badge.textContent='PLAYER '+selectedNumber;
+      joinCard.classList.add('hidden');controlCard.classList.remove('hidden');
+      connectStatus.textContent='接続済み'; await wake(); if(sensorActive)ensureSensor();
+    });
+    cConn.on('data',d=>{
+      if(d?.type==='reject'){if(retry){setTimeout(()=>connect(true),1200)}else alert(d.message||'番号使用中')}
+      if(d?.type==='fall')tilt.textContent='穴に落下！スタートへ戻ります';
+      if(d?.type==='goal')tilt.textContent='GOAL！';
+      if(d?.type==='reset')tilt.textContent='左右 0.0° / 前後 0.0°';
+    });
+    cConn.on('close',()=>{connectStatus.textContent='再接続します';setTimeout(()=>connect(true),900)});
+  });
+}
+connectBtn.onclick=()=>{selectedNumber=Number(numSelect.value);connect(false)};
+sensorBtn.onclick=async()=>{
+  if(typeof DeviceOrientationEvent==='undefined'){alert('傾きセンサー非対応');return}
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted')return;
+  }
+  ensureSensor();sensorActive=true;await wake();
+  setTimeout(()=>{baseGamma=rawGamma;baseBeta=rawBeta;sensorBtn.textContent='センサー接続済み'},300);
+};
+recalibrateBtn.onclick=()=>{baseGamma=rawGamma;baseBeta=rawBeta};
+document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'){await wake();if(sensorActive)ensureSensor();if(!cConn?.open&&selectedNumber)setTimeout(()=>connect(true),600)}});
+
+let hostInit=false;
+function initHost(){
+  if(hostInit)return;hostInit=true;
+  const canvas=document.getElementById('game'),ctx=canvas.getContext('2d'),count=document.getElementById('count'),ranking=document.getElementById('ranking');
+  const resetBtn=document.getElementById('resetBtn'),startBtn=document.getElementById('startBtn'),overlay=document.getElementById('overlay'),overlayTitle=document.getElementById('overlayTitle'),overlayText=document.getElementById('overlayText');
+  let W=0,H=0,DPR=1,scale=1,ox=0,oy=0,running=false,last=performance.now();
+  const players=new Map(),conns=new Map(),finishers=[];
+  const peer=new Peer(FIXED_ROOM);
+
+  // Logical board 1000x650
+  const start={x:80,y:560},goal={x:920,y:90};
+  const walls=[
+    {x:0,y:0,w:1000,h:22},{x:0,y:628,w:1000,h:22},{x:0,y:0,w:22,h:650},{x:978,y:0,w:22,h:650},
+    {x:150,y:80,w:22,h:410},{x:150,y:80,w:250,h:22},
+    {x:280,y:190,w:22,h:360},{x:280,y:528,w:270,h:22},
+    {x:400,y:80,w:22,h:320},{x:400,y:378,w:250,h:22},
+    {x:535,y:165,w:22,h:235},{x:535,y:165,w:265,h:22},
+    {x:650,y:275,w:22,h:275},{x:650,y:528,w:210,h:22},
+    {x:800,y:165,w:22,h:255}
+  ];
+  const holes=[
+    {x:225,y:145,r:28},{x:345,y:455,r:30},{x:480,y:455,r:27},
+    {x:610,y:235,r:30},{x:730,y:465,r:31},{x:875,y:250,r:28}
+  ];
+
+  function resize(){
+    DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;
+    canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min((W-30)/1000,(H-30)/650);ox=(W-1000*scale)/2;oy=(H-650*scale)/2;
+  }
+  function createPlayer(number){
+    return{number,x:start.x+(number-1)%5*14,y:start.y-Math.floor((number-1)/5)*18,vx:0,vy:0,r:12,inputX:0,inputY:0,active:true,goal:false,fallUntil:0};
+  }
+  function resetPlayer(p){p.x=start.x+(p.number-1)%5*14;p.y=start.y-Math.floor((p.number-1)/5)*18;p.vx=p.vy=0;p.active=true;p.goal=false;p.fallUntil=0}
+  function resetAll(){finishers.length=0;for(const p of players.values())resetPlayer(p);ranking.textContent='ゴール：なし';running=false;overlay.style.display='none';for(const c of conns.values())if(c.open)c.send({type:'reset'})}
+  peer.on('connection',conn=>{
+    let key=null;
+    conn.on('data',d=>{
+      if(d?.type==='join'){
+        key=Number(d.number);
+        if(conns.has(key)){conn.send({type:'reject',message:'その番号は使用中です'});return}
+        conns.set(key,conn);players.set(key,createPlayer(key));count.textContent=`参加者 ${players.size}/10`;
+      }
+      if(d?.type==='tilt'&&key&&players.has(key)){const p=players.get(key);p.inputX=clamp(+d.x||0,-1,1);p.inputY=clamp(+d.y||0,-1,1)}
+    });
+    conn.on('close',()=>{if(key){conns.delete(key);players.delete(key);count.textContent=`参加者 ${players.size}/10`}});
+  });
+
+  function circleRect(p,w){
+    const nx=clamp(p.x,w.x,w.x+w.w),ny=clamp(p.y,w.y,w.y+w.h),dx=p.x-nx,dy=p.y-ny;
+    return dx*dx+dy*dy<p.r*p.r;
+  }
+  function resolveWall(p,w){
+    if(!circleRect(p,w))return;
+    const left=Math.abs((p.x+p.r)-w.x),right=Math.abs((w.x+w.w)-(p.x-p.r)),top=Math.abs((p.y+p.r)-w.y),bottom=Math.abs((w.y+w.h)-(p.y-p.r));
+    const m=Math.min(left,right,top,bottom);
+    if(m===left){p.x=w.x-p.r;p.vx=-Math.abs(p.vx)*.45}
+    else if(m===right){p.x=w.x+w.w+p.r;p.vx=Math.abs(p.vx)*.45}
+    else if(m===top){p.y=w.y-p.r;p.vy=-Math.abs(p.vy)*.45}
+    else{p.y=w.y+w.h+p.r;p.vy=Math.abs(p.vy)*.45}
+  }
+  function collide(a,b){
+    const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy),min=a.r+b.r;if(!d||d>=min)return;
+    const nx=dx/d,ny=dy/d,over=min-d;a.x-=nx*over/2;a.y-=ny*over/2;b.x+=nx*over/2;b.y+=ny*over/2;
+    const rvx=b.vx-a.vx,rvy=b.vy-a.vy,vel=rvx*nx+rvy*ny;if(vel>0)return;
+    const imp=-(1+.75)*vel/2;a.vx-=imp*nx;a.vy-=imp*ny;b.vx+=imp*nx;b.vy+=imp*ny;
+  }
+  function update(dt){
+    if(!running)return;
+    const now=performance.now();
+    for(const p of players.values()){
+      if(p.goal)continue;
+      if(p.fallUntil){
+        if(now>=p.fallUntil){resetPlayer(p)}
+        continue;
+      }
+      p.vx+=p.inputX*430*dt;p.vy+=p.inputY*430*dt;p.vx*=Math.pow(.986,dt*60);p.vy*=Math.pow(.986,dt*60);
+      const sp=Math.hypot(p.vx,p.vy);if(sp>520){p.vx=p.vx/sp*520;p.vy=p.vy/sp*520}
+      p.x+=p.vx*dt;p.y+=p.vy*dt;
+      for(const w of walls)resolveWall(p,w);
+      for(const h of holes){
+        if(Math.hypot(p.x-h.x,p.y-h.y)<h.r*.72){
+          p.fallUntil=now+900;p.vx=p.vy=0;const c=conns.get(p.number);if(c?.open)c.send({type:'fall'});break;
+        }
+      }
+      if(!p.fallUntil&&Math.hypot(p.x-goal.x,p.y-goal.y)<38){
+        p.goal=true;p.vx=p.vy=0;finishers.push(p.number);ranking.textContent='ゴール：'+finishers.map((n,i)=>`${i+1}位 P${n}`).join(' / ');
+        const c=conns.get(p.number);if(c?.open)c.send({type:'goal'});
+        if(finishers.length===players.size&&players.size>0){running=false;overlayTitle.textContent='全員ゴール！';overlayText.textContent=ranking.textContent;overlay.style.display='flex'}
+      }
+    }
+    const active=[...players.values()].filter(p=>!p.goal&&!p.fallUntil);
+    for(let i=0;i<active.length;i++)for(let j=i+1;j<active.length;j++)collide(active[i],active[j]);
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);ctx.fillStyle='#0a0d12';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(ox,oy);ctx.scale(scale,scale);
+    ctx.fillStyle='#d7cfb3';ctx.fillRect(0,0,1000,650);
+    // goal
+    ctx.fillStyle='#b6e3b6';ctx.fillRect(870,40,95,95);ctx.fillStyle='#173717';ctx.font='700 22px system-ui';ctx.fillText('GOAL',884,95);
+    // start
+    ctx.fillStyle='#d9e5ff';ctx.fillRect(35,520,100,95);ctx.fillStyle='#17304f';ctx.fillText('START',48,575);
+    // walls
+    ctx.fillStyle='#4f5968';for(const w of walls)ctx.fillRect(w.x,w.y,w.w,w.h);
+    // holes
+    for(const h of holes){ctx.beginPath();ctx.arc(h.x,h.y,h.r,0,Math.PI*2);ctx.fillStyle='#090909';ctx.fill();ctx.beginPath();ctx.arc(h.x-6,h.y-7,h.r*.42,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.08)';ctx.fill()}
+    // players
+    for(const p of players.values()){
+      if(p.goal)continue;
+      let rr=p.r,alpha=1;
+      if(p.fallUntil){const remain=Math.max(0,p.fallUntil-performance.now());const t=1-remain/900;rr=p.r*(1-t*.85);alpha=1-t*.8}
+      ctx.save();ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(p.x,p.y,rr,0,Math.PI*2);ctx.fillStyle=`hsl(${(p.number-1)*36} 70% 52%)`;ctx.fill();ctx.strokeStyle='#111';ctx.lineWidth=2;ctx.stroke();
+      if(rr>7){ctx.fillStyle='#fff';ctx.font='700 11px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(p.number),p.x,p.y)}
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function loop(now){const dt=Math.min((now-last)/1000,.033);last=now;update(dt);draw();requestAnimationFrame(loop)}
+  resetBtn.onclick=resetAll;
+  startBtn.onclick=()=>{finishers.length=0;for(const p of players.values())resetPlayer(p);ranking.textContent='ゴール：なし';running=true;overlayTitle.textContent='START!';overlayText.textContent='';overlay.style.display='flex';setTimeout(()=>overlay.style.display='none',700)};
+  addEventListener('resize',resize);resize();requestAnimationFrame(loop);
+}
+})();
+</script>
+</body>
+</html>
