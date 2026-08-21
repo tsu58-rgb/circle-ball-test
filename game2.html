@@ -1,104 +1,392 @@
-<!doctype html><meta charset="utf-8"><title>迷路＋落とし穴レース</title><script>
-(async()=>{
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>迷路＋落とし穴レース</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d1015;color:#fff}
+button,input,select{font:inherit}
+button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}
+.hidden{display:none!important}
+.panel{max-width:760px;margin:0 auto;padding:18px}
+.card{background:#1a1f27;border:1px solid #303744;border-radius:14px;padding:16px;margin:12px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 160px}
+select{width:100%;padding:12px;border-radius:10px;border:1px solid #39404d;background:#11151b;color:#fff}
+.primary{background:#fff;color:#111}
+.secondary{background:#2a303b;color:#fff}
+.status{padding:10px 12px;border-radius:10px;background:#11151b;margin-top:10px}
+#host{position:relative;height:100vh;overflow:hidden;background:#080b0f}
+#game{position:absolute;inset:0;width:100%;height:100%;display:block}
+#hud{position:absolute;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.65);padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5}
+#hostButtons{position:absolute;right:12px;top:12px;z-index:5;display:flex;gap:8px}
+#overlay{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4);text-align:center}
+#overlayBox{background:rgba(0,0,0,.82);padding:22px 28px;border-radius:16px}
+#overlayTitle{font-size:30px;font-weight:900}
+#controller .badge{font-size:30px;font-weight:900;text-align:center;background:#24486f;padding:14px;border-radius:14px}
+#pad{height:180px;margin-top:12px;border-radius:20px;background:#151922;border:1px solid #2d3440;position:relative}
+#dot{width:32px;height:32px;border-radius:50%;background:#fff;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+.small{font-size:12px;color:#b8bec8}
+</style>
+</head>
+<body>
+
+<section id="home">
+  <div class="panel">
+    <h1>迷路＋落とし穴レース</h1>
+    <div class="card">
+      <p>PCはゲーム本体、スマホはコントローラーです。最大10人が同じ迷路を同時に走ります。</p>
+      <div class="row">
+        <button id="openHost" class="primary">ゲーム画面のみ表示</button>
+        <button id="openController" class="secondary">ゲームに参加する</button>
+      </div>
+      <p><a href="./index.html" style="color:#fff">← ゲーム一覧へ戻る</a></p>
+    </div>
+  </div>
+</section>
+
+<section id="controller" class="hidden">
+  <div style="height:42vh;min-height:260px;background:#080b0f;position:relative;border-bottom:1px solid #333">
+    <canvas id="spectatorCanvas2" style="width:100%;height:100%;display:block"></canvas>
+    <div style="position:absolute;left:10px;top:10px;background:rgba(0,0,0,.6);padding:6px 9px;border-radius:8px;font-size:12px">ゲーム画面</div>
+  </div>
+  <div class="panel">
+    <h2>スマホコントローラー</h2>
+    <div id="joinCard" class="card">
+      <label for="numSelect">自分の番号</label>
+      <select id="numSelect">
+        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+        <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+      </select>
+      <button id="connectBtn" class="primary" style="width:100%;margin-top:12px">共通迷路に参加</button>
+      <div id="connectStatus" class="status">未接続</div>
+    </div>
+
+    <div id="controlCard" class="card hidden">
+      <div id="badge" class="badge">PLAYER</div>
+      <button id="sensorBtn" class="primary" style="width:100%;margin-top:12px">傾きセンサーを開始</button>
+      <button id="recalibrateBtn" class="secondary" style="width:100%;margin-top:8px">今の角度を水平基準にする</button>
+      <div id="tilt" class="status">左右 0.0° / 前後 0.0°</div>
+      <div id="wakeStatus" class="status">画面スリープ防止：未開始</div>
+      <div id="pad"><div id="dot"></div></div>
+      <p class="small">穴に落ちるとスタートへ戻ります。ほかのボールともぶつかります。</p>
+    </div>
+  </div>
+</section>
+
+<section id="host" class="hidden">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div><strong>共通迷路・接続受付中</strong></div>
+    <div id="count">参加者 0/10</div>
+    <div id="ranking">ゴール：なし</div>
+  </div>
+  <div id="hostButtons">
+    <button id="resetBtn">リセット</button>
+    <button id="startBtn">レース開始</button>
+    <button id="backBtn" class="secondary">一覧へ</button>
+  </div>
+  <div id="overlay">
+    <div id="overlayBox">
+      <div id="overlayTitle"></div>
+      <div id="overlayText"></div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+(()=>{
+const home=document.getElementById('home'),host=document.getElementById('host'),controller=document.getElementById('controller');
+const openHost=document.getElementById('openHost'),openController=document.getElementById('openController');
+const params=new URLSearchParams(location.search),mode=params.get('mode');
+function show(el){home.classList.add('hidden');host.classList.add('hidden');controller.classList.add('hidden');el.classList.remove('hidden')}
+openHost.onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=host');show(host);initHost()};
+openController.onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=controller');show(controller)};
+if(mode==='host'){show(host);setTimeout(initHost,0)}else if(mode==='controller')show(controller);
+document.getElementById('backBtn').onclick=()=>location.href='./index.html';
+
+const FIXED_ROOM='yuru-maze-race-main';
+const numSelect=document.getElementById('numSelect'),connectBtn=document.getElementById('connectBtn'),connectStatus=document.getElementById('connectStatus');
+const joinCard=document.getElementById('joinCard'),controlCard=document.getElementById('controlCard'),badge=document.getElementById('badge');
+const sensorBtn=document.getElementById('sensorBtn'),recalibrateBtn=document.getElementById('recalibrateBtn'),tilt=document.getElementById('tilt');
+const dot=document.getElementById('dot'),wakeStatus=document.getElementById('wakeStatus');
+
+let cPeer=null,cConn=null,selectedNumber=null,sensorActive=false,rawGamma=0,rawBeta=0,baseGamma=0,baseBeta=0,lastSend=0,wakeLock=null,reconnectTimer=null;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const delta=(v,b)=>{let d=v-b;while(d>180)d-=360;while(d<-180)d+=360;return d};
+
+async function wake(){
+  if(!('wakeLock' in navigator)){wakeStatus.textContent='画面スリープ防止：端末非対応';return}
   try{
-    const u="https://raw.githubusercontent.com/tsu58-rgb/circle-ball-test/afbced1c4a05c30e5986fb205bb9d92191778eff/game2.html";
-    let h=await(await fetch(u,{cache:"no-store"})).text();
-
-    const properMaze=`
-  const MAZE_COLS=12,MAZE_ROWS=8,MAZE_MX=28,MAZE_MY=28;
-  const MAZE_CW=(1000-MAZE_MX*2)/MAZE_COLS;
-  const MAZE_CH=(650-MAZE_MY*2)/MAZE_ROWS;
-  const MAZE_WALL=10;
-
-  function mazeRand(seed){
-    let x=seed>>>0;
-    return ()=>{x=(x*1664525+1013904223)>>>0;return x/4294967296};
+    if(wakeLock&&!wakeLock.released){wakeStatus.textContent='画面スリープ防止：ON';return}
+    wakeLock=await navigator.wakeLock.request('screen');
+    wakeStatus.textContent='画面スリープ防止：ON';
+  }catch(e){wakeStatus.textContent='画面スリープ防止：利用できません'}
+}
+function orientation(e){
+  if(typeof e.gamma==='number')rawGamma=e.gamma;
+  if(typeof e.beta==='number')rawBeta=e.beta;
+  if(!sensorActive||!cConn?.open)return;
+  const now=performance.now(); if(now-lastSend<33)return; lastSend=now;
+  const x=clamp(delta(rawGamma,baseGamma),-30,30),y=clamp(delta(rawBeta,baseBeta),-30,30);
+  tilt.textContent=`左右 ${x.toFixed(1)}° / 前後 ${y.toFixed(1)}°`;
+  dot.style.transform=`translate(calc(-50% + ${x/30*62}px),calc(-50% + ${y/30*62}px))`;
+  cConn.send({type:'tilt',x:x/30,y:y/30});
+}
+function ensureSensor(){removeEventListener('deviceorientation',orientation,true);addEventListener('deviceorientation',orientation,true)}
+function connect(retry=false){
+  selectedNumber=selectedNumber||Number(numSelect.value);
+  try{cConn?.close()}catch(e){}
+  try{cPeer?.destroy()}catch(e){}
+  connectStatus.textContent=retry?'再接続中...':'接続中...';
+  cPeer=new Peer();
+  cPeer.on('open',()=>{
+    cConn=cPeer.connect(FIXED_ROOM,{reliable:true});
+    cConn.on('open',async()=>{
+      cConn.send({type:'join',number:selectedNumber});
+      badge.textContent='PLAYER '+selectedNumber;
+      joinCard.classList.add('hidden');controlCard.classList.remove('hidden');
+      connectStatus.textContent='接続済み'; await wake(); if(sensorActive)ensureSensor();
+    });
+    cConn.on('data',d=>{
+      if(d?.type==='state')drawSpectator2(d);
+      if(d?.type==='reject'){if(retry){setTimeout(()=>connect(true),1200)}else alert(d.message||'番号使用中')}
+      if(d?.type==='fall')tilt.textContent='穴に落下！スタートへ戻ります';
+      if(d?.type==='goal')tilt.textContent='GOAL！';
+      if(d?.type==='reset')tilt.textContent='左右 0.0° / 前後 0.0°';
+    });
+    cConn.on('close',()=>{connectStatus.textContent='再接続します';setTimeout(()=>connect(true),900)});
+  });
+}
+connectBtn.onclick=()=>{selectedNumber=Number(numSelect.value);connect(false)};
+sensorBtn.onclick=async()=>{
+  if(typeof DeviceOrientationEvent==='undefined'){alert('傾きセンサー非対応');return}
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted')return;
   }
-  function mazeIndex(c,r){return r*MAZE_COLS+c}
-  function buildProperMaze(){
-    const rand=mazeRand(20260822);
-    const cells=Array.from({length:MAZE_COLS*MAZE_ROWS},()=>({n:true,e:true,s:true,w:true,v:false}));
-    const stack=[{c:0,r:MAZE_ROWS-1}];
-    cells[mazeIndex(0,MAZE_ROWS-1)].v=true;
-    const dirs=[
-      {dc:0,dr:-1,a:'n',b:'s'},
-      {dc:1,dr:0,a:'e',b:'w'},
-      {dc:0,dr:1,a:'s',b:'n'},
-      {dc:-1,dr:0,a:'w',b:'e'}
-    ];
+  ensureSensor();sensorActive=true;await wake();
+  setTimeout(()=>{baseGamma=rawGamma;baseBeta=rawBeta;sensorBtn.textContent='センサー接続済み'},300);
+};
+recalibrateBtn.onclick=()=>{baseGamma=rawGamma;baseBeta=rawBeta};
+document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'){await wake();if(sensorActive)ensureSensor();if(!cConn?.open&&selectedNumber)setTimeout(()=>connect(true),600)}});
 
-    while(stack.length){
-      const cur=stack[stack.length-1],opts=[];
-      for(const d of dirs){
-        const nc=cur.c+d.dc,nr=cur.r+d.dr;
-        if(nc<0||nc>=MAZE_COLS||nr<0||nr>=MAZE_ROWS)continue;
-        if(!cells[mazeIndex(nc,nr)].v)opts.push({...d,nc,nr});
+const spectatorCanvas2=document.getElementById('spectatorCanvas2');
+function drawSpectator2(d){
+  if(!spectatorCanvas2||!d)return;
+  const r=spectatorCanvas2.getBoundingClientRect(),dp=Math.min(devicePixelRatio||1,2);
+  spectatorCanvas2.width=Math.max(1,Math.round(r.width*dp));
+  spectatorCanvas2.height=Math.max(1,Math.round(r.height*dp));
+  const g=spectatorCanvas2.getContext('2d');
+  g.setTransform(dp,0,0,dp,0,0);
+  const w=r.width,h=r.height,sc=Math.min(w/1000,h/650),ox=(w-1000*sc)/2,oy=(h-650*sc)/2;
+  g.fillStyle='#0a0d12';g.fillRect(0,0,w,h);
+  g.save();g.translate(ox,oy);g.scale(sc,sc);
+  g.fillStyle='#d7cfb3';g.fillRect(0,0,1000,650);
+  g.fillStyle='#d9e5ff';g.fillRect(35,520,95,95);
+  if(d.goal){
+    g.beginPath();g.arc(d.goal.x,d.goal.y,d.goal.r+8,0,Math.PI*2);g.fillStyle='#7abf6b';g.fill();
+    g.beginPath();g.arc(d.goal.x,d.goal.y,d.goal.r,0,Math.PI*2);g.fillStyle='#0b0b0b';g.fill();
+  }
+  g.fillStyle='#4f5968';
+  for(const q of d.walls||[])g.fillRect(q.x,q.y,q.w,q.h);
+  for(const q of d.holes||[]){
+    g.beginPath();g.arc(q.x,q.y,q.r*1.25,0,Math.PI*2);g.fillStyle='rgba(0,0,0,.35)';g.fill();
+    g.beginPath();g.arc(q.x,q.y,q.r,0,Math.PI*2);g.fillStyle='#050505';g.fill();
+    g.save();g.strokeStyle='rgba(255,255,255,.22)';g.lineWidth=1.2;
+    for(let k=0;k<6;k++){
+      g.beginPath();
+      const ph=k*Math.PI/3;
+      for(let t=0;t<Math.PI*3.5;t+=.18){
+        const rr=q.r*1.4*(1-t/(Math.PI*3.5));
+        const a=t+ph;
+        const x=q.x+Math.cos(a)*rr,y=q.y+Math.sin(a)*rr*.55;
+        if(t===0)g.moveTo(x,y);else g.lineTo(x,y);
       }
-      if(!opts.length){stack.pop();continue}
-      const d=opts[Math.floor(rand()*opts.length)];
-      const a=cells[mazeIndex(cur.c,cur.r)],b=cells[mazeIndex(d.nc,d.nr)];
-      a[d.a]=false;b[d.b]=false;b.v=true;
-      stack.push({c:d.nc,r:d.nr});
+      g.stroke();
+    }
+    g.restore();
+  }
+  for(const p of d.players||[]){
+    if(p.goal)continue;
+    g.beginPath();g.arc(p.x,p.y,p.r,0,Math.PI*2);
+    g.fillStyle=`hsl(${(p.number-1)*36} 72% 52%)`;g.fill();g.strokeStyle='#111';g.stroke();
+    g.fillStyle='#fff';g.font='700 11px system-ui';g.textAlign='center';g.textBaseline='middle';g.fillText(String(p.number),p.x,p.y);
+  }
+  g.restore();
+}
+
+let hostInit=false;
+function initHost(){
+  if(hostInit)return;
+  hostInit=true;
+
+  const canvas=document.getElementById('game');
+  const ctx=canvas.getContext('2d');
+  const count=document.getElementById('count');
+  const ranking=document.getElementById('ranking');
+  const resetBtn=document.getElementById('resetBtn');
+  const startBtn=document.getElementById('startBtn');
+  const overlay=document.getElementById('overlay');
+  const overlayTitle=document.getElementById('overlayTitle');
+  const overlayText=document.getElementById('overlayText');
+
+  let W=0,H=0,DPR=1,scale=1,ox=0,oy=0,running=false,last=performance.now();
+  let audioCtx=null;
+  let lastStateSend=0;
+  const players=new Map();
+  const conns=new Map();
+  const finishers=[];
+  const peer=new Peer(FIXED_ROOM);
+
+  const COLS=12,ROWS=8;
+  const BOARD_W=1000,BOARD_H=650;
+  const MARGIN_X=36,MARGIN_Y=32;
+  const MAZE_W=BOARD_W-MARGIN_X*2;
+  const MAZE_H=BOARD_H-MARGIN_Y*2;
+  const CELL_W=MAZE_W/COLS;
+  const CELL_H=MAZE_H/ROWS;
+  const WALL=10;
+  const startCell={c:0,r:ROWS-1};
+  const goalCell={c:COLS-1,r:0};
+  const start={x:MARGIN_X+CELL_W*.5,y:MARGIN_Y+(ROWS-.5)*CELL_H};
+  const goal={x:MARGIN_X+(COLS-.5)*CELL_W,y:MARGIN_Y+CELL_H*.5,r:24};
+
+  function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+  const rand=mulberry32(260822);
+  const cellIndex=(c,r)=>r*COLS+c;
+
+  function buildMaze(){
+    const cells=Array.from({length:COLS*ROWS},()=>({n:true,e:true,s:true,w:true,visited:false}));
+    const stack=[];
+    let current=cellIndex(startCell.c,startCell.r);
+    cells[current].visited=true;
+    let visited=1;
+
+    while(visited<COLS*ROWS){
+      const c=current%COLS,r=Math.floor(current/COLS);
+      const options=[];
+      if(r>0&&!cells[cellIndex(c,r-1)].visited)options.push(['n',c,r-1]);
+      if(c<COLS-1&&!cells[cellIndex(c+1,r)].visited)options.push(['e',c+1,r]);
+      if(r<ROWS-1&&!cells[cellIndex(c,r+1)].visited)options.push(['s',c,r+1]);
+      if(c>0&&!cells[cellIndex(c-1,r)].visited)options.push(['w',c-1,r]);
+
+      if(options.length){
+        const pick=options[Math.floor(rand()*options.length)];
+        const [dir,nc,nr]=pick,ni=cellIndex(nc,nr);
+        if(dir==='n'){cells[current].n=false;cells[ni].s=false}
+        if(dir==='e'){cells[current].e=false;cells[ni].w=false}
+        if(dir==='s'){cells[current].s=false;cells[ni].n=false}
+        if(dir==='w'){cells[current].w=false;cells[ni].e=false}
+        stack.push(current);current=ni;cells[current].visited=true;visited++;
+      }else current=stack.pop();
     }
 
     const walls=[];
-    walls.push({x:MAZE_MX-MAZE_WALL/2,y:MAZE_MY-MAZE_WALL/2,w:MAZE_COLS*MAZE_CW+MAZE_WALL,h:MAZE_WALL});
-    walls.push({x:MAZE_MX-MAZE_WALL/2,y:MAZE_MY+MAZE_ROWS*MAZE_CH-MAZE_WALL/2,w:MAZE_COLS*MAZE_CW+MAZE_WALL,h:MAZE_WALL});
-    walls.push({x:MAZE_MX-MAZE_WALL/2,y:MAZE_MY-MAZE_WALL/2,w:MAZE_WALL,h:MAZE_ROWS*MAZE_CH+MAZE_WALL});
-    walls.push({x:MAZE_MX+MAZE_COLS*MAZE_CW-MAZE_WALL/2,y:MAZE_MY-MAZE_WALL/2,w:MAZE_WALL,h:MAZE_ROWS*MAZE_CH+MAZE_WALL});
-
-    for(let r=0;r<MAZE_ROWS;r++){
-      for(let c=0;c<MAZE_COLS;c++){
-        const cell=cells[mazeIndex(c,r)],x=MAZE_MX+c*MAZE_CW,y=MAZE_MY+r*MAZE_CH;
-        if(c<MAZE_COLS-1&&cell.e)walls.push({x:x+MAZE_CW-MAZE_WALL/2,y:y-MAZE_WALL/2,w:MAZE_WALL,h:MAZE_CH+MAZE_WALL});
-        if(r<MAZE_ROWS-1&&cell.s)walls.push({x:x-MAZE_WALL/2,y:y+MAZE_CH-MAZE_WALL/2,w:MAZE_CW+MAZE_WALL,h:MAZE_WALL});
-      }
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const cell=cells[cellIndex(c,r)],x=MARGIN_X+c*CELL_W,y=MARGIN_Y+r*CELL_H;
+      if(cell.n)walls.push({x,y,w:CELL_W+WALL,h:WALL});
+      if(cell.w)walls.push({x,y,w:WALL,h:CELL_H+WALL});
+      if(c===COLS-1&&cell.e)walls.push({x:x+CELL_W,y,w:WALL,h:CELL_H+WALL});
+      if(r===ROWS-1&&cell.s)walls.push({x,y:y+CELL_H,w:CELL_W+WALL,h:WALL});
     }
 
-    const si=mazeIndex(0,MAZE_ROWS-1),gi=mazeIndex(MAZE_COLS-1,0);
-    const q=[si],prev=new Array(MAZE_COLS*MAZE_ROWS).fill(-1);prev[si]=si;
-    while(q.length){
-      const i=q.shift();if(i===gi)break;
-      const c=i%MAZE_COLS,r=Math.floor(i/MAZE_COLS),cell=cells[i],next=[];
+    const startI=cellIndex(startCell.c,startCell.r);
+    const goalI=cellIndex(goalCell.c,goalCell.r);
+    const queue=[startI],prev=new Array(COLS*ROWS).fill(-1);prev[startI]=startI;
+    while(queue.length){
+      const i=queue.shift();if(i===goalI)break;
+      const c=i%COLS,r=Math.floor(i/COLS),cell=cells[i],next=[];
       if(!cell.n)next.push([c,r-1]);if(!cell.e)next.push([c+1,r]);if(!cell.s)next.push([c,r+1]);if(!cell.w)next.push([c-1,r]);
-      for(const [nc,nr] of next){
-        if(nc<0||nc>=MAZE_COLS||nr<0||nr>=MAZE_ROWS)continue;
-        const ni=mazeIndex(nc,nr);if(prev[ni]!==-1)continue;prev[ni]=i;q.push(ni);
+      for(const [nc,nr] of next){if(nc<0||nc>=COLS||nr<0||nr>=ROWS)continue;const ni=cellIndex(nc,nr);if(prev[ni]!==-1)continue;prev[ni]=i;queue.push(ni)}
+    }
+    const solution=new Set();let cur=goalI;while(cur!==startI&&cur!==-1){solution.add(cur);cur=prev[cur]}solution.add(startI);
+
+    // 穴の配置は正解ルートと無関係にする。
+    // START/GOAL直近だけ避け、通路幅を完全に塞がない半径で配置する。
+    const candidates=[];
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const i=cellIndex(c,r);
+        if(i===startI||i===goalI)continue;
+        candidates.push({c,r});
       }
     }
-    const solution=new Set();let cur=gi;
-    while(cur!==si&&cur!==-1){solution.add(cur);cur=prev[cur]}solution.add(si);
 
-    const candidates=[];
-    for(let r=0;r<MAZE_ROWS;r++)for(let c=0;c<MAZE_COLS;c++){
-      const i=mazeIndex(c,r);if(solution.has(i))continue;
-      const cell=cells[i],open=[!cell.n,!cell.e,!cell.s,!cell.w].filter(Boolean).length;
-      if(open<=2)candidates.push({c,r});
-    }
     const holes=[];
-    for(let k=0;k<Math.min(7,candidates.length);k++){
-      const n=Math.floor(rand()*candidates.length),z=candidates.splice(n,1)[0];
-      holes.push({x:MAZE_MX+(z.c+.5)*MAZE_CW,y:MAZE_MY+(z.r+.5)*MAZE_CH,r:21});
+    const wanted=Math.min(9,candidates.length);
+    for(let k=0;k<wanted;k++){
+      const idx=Math.floor(rand()*candidates.length);
+      const q=candidates.splice(idx,1)[0];
+      holes.push({
+        x:MARGIN_X+(q.c+.5)*CELL_W,
+        y:MARGIN_Y+(q.r+.5)*CELL_H,
+        r:18
+      });
     }
-    return {walls,holes};
+
+    return {cells,walls,holes,solution};
   }
-  const properMaze=buildProperMaze();
-  const walls=properMaze.walls;
-  const holes=properMaze.holes;
-`;
 
-    h=h.replace(/const walls=\[[\s\S]*?\];\s*const holes=\[[\s\S]*?\];/,properMaze);
+  const maze=buildMaze();
+  const walls=maze.walls;
+  const holes=maze.holes;
 
-    h=h.replace("gain.gain.setValueAtTime(.18,now)","gain.gain.setValueAtTime(.95,now)")
-       .replace("master.gain.setValueAtTime(.12,now)","master.gain.setValueAtTime(.90,now)")
-       .replace("g.gain.setValueAtTime(.15,now)","g.gain.setValueAtTime(.85,now)")
-       .replace("g.gain.setValueAtTime(.10,now+i*.07)","g.gain.setValueAtTime(.75,now+i*.07)")
-       .replaceAll("ctx.fillStyle='#4f5968'","ctx.fillStyle='#333943'")
-       .replaceAll("g.fillStyle='#4f5968'","g.fillStyle='#333943'");
+  function ensureAudio(){try{if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioCtx=new AC()}if(audioCtx?.state==='suspended')audioCtx.resume()}catch(e){}}
+  function soundWall(){ensureAudio();if(!audioCtx)return;const now=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.setValueAtTime(90,now);o.frequency.exponentialRampToValueAtTime(55,now+.09);g.gain.setValueAtTime(.68,now);g.gain.exponentialRampToValueAtTime(.001,now+.11);o.connect(g).connect(audioCtx.destination);o.start(now);o.stop(now+.12)}
+  function soundMetal(){ensureAudio();if(!audioCtx)return;const now=audioCtx.currentTime,m=audioCtx.createGain();m.gain.setValueAtTime(.72,now);m.gain.exponentialRampToValueAtTime(.001,now+.18);m.connect(audioCtx.destination);[1250,1880,2700].forEach((f,i)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=i===0?'triangle':'sine';o.frequency.setValueAtTime(f,now);g.gain.setValueAtTime([.7,.45,.25][i],now);g.gain.exponentialRampToValueAtTime(.001,now+.12+i*.02);o.connect(g).connect(m);o.start(now);o.stop(now+.2)})}
+  function soundFall(){ensureAudio();if(!audioCtx)return;const now=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.setValueAtTime(430,now);o.frequency.exponentialRampToValueAtTime(70,now+.55);g.gain.setValueAtTime(.62,now);g.gain.exponentialRampToValueAtTime(.001,now+.58);o.connect(g).connect(audioCtx.destination);o.start(now);o.stop(now+.6)}
+  function soundCup(){ensureAudio();if(!audioCtx)return;const now=audioCtx.currentTime;[880,1175,1568].forEach((f,i)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.setValueAtTime(f,now+i*.07);g.gain.setValueAtTime(.52,now+i*.07);g.gain.exponentialRampToValueAtTime(.001,now+i*.07+.22);o.connect(g).connect(audioCtx.destination);o.start(now+i*.07);o.stop(now+i*.07+.24)})}
 
-    document.open();document.write(h);document.close();
-  }catch(e){
-    document.body.textContent="読み込みに失敗しました: "+e.message;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);scale=Math.min((W-30)/BOARD_W,(H-30)/BOARD_H);ox=(W-BOARD_W*scale)/2;oy=(H-BOARD_H*scale)/2}
+  function createPlayer(number){return{number,x:start.x+((number-1)%5)*8,y:start.y-Math.floor((number-1)/5)*14,vx:0,vy:0,r:11,inputX:0,inputY:0,goal:false,falling:false,fallStart:0,fallDuration:900,lastWallSound:0,lastBallSound:0}}
+  function resetPlayer(p){p.x=start.x+((p.number-1)%5)*8;p.y=start.y-Math.floor((p.number-1)/5)*14;p.vx=p.vy=0;p.goal=false;p.falling=false;p.fallStart=0}
+  function resetAll(){finishers.length=0;for(const p of players.values())resetPlayer(p);ranking.textContent='ゴール：なし';running=false;overlay.style.display='none';for(const c of conns.values())if(c.open)c.send({type:'reset'})}
+
+  peer.on('connection',conn=>{let key=null;conn.on('data',d=>{if(d?.type==='join'){key=Number(d.number);if(conns.has(key)){conn.send({type:'reject',message:'その番号は使用中です'});return}conns.set(key,conn);players.set(key,createPlayer(key));count.textContent=`参加者 ${players.size}/10`}if(d?.type==='tilt'&&key&&players.has(key)){const p=players.get(key);p.inputX=clamp(+d.x||0,-1,1);p.inputY=clamp(+d.y||0,-1,1)}});conn.on('close',()=>{if(key){conns.delete(key);players.delete(key);count.textContent=`参加者 ${players.size}/10`}})});
+
+  function circleRect(p,w){const nx=clamp(p.x,w.x,w.x+w.w),ny=clamp(p.y,w.y,w.y+w.h),dx=p.x-nx,dy=p.y-ny;return dx*dx+dy*dy<p.r*p.r}
+  function resolveWall(p,w){if(!circleRect(p,w))return;const now=performance.now();if(now-p.lastWallSound>90){soundWall();p.lastWallSound=now}const left=Math.abs((p.x+p.r)-w.x),right=Math.abs((w.x+w.w)-(p.x-p.r)),top=Math.abs((p.y+p.r)-w.y),bottom=Math.abs((w.y+w.h)-(p.y-p.r)),m=Math.min(left,right,top,bottom);if(m===left){p.x=w.x-p.r;p.vx=-Math.abs(p.vx)*.48}else if(m===right){p.x=w.x+w.w+p.r;p.vx=Math.abs(p.vx)*.48}else if(m===top){p.y=w.y-p.r;p.vy=-Math.abs(p.vy)*.48}else{p.y=w.y+w.h+p.r;p.vy=Math.abs(p.vy)*.48}}
+  function collide(a,b){const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy),min=a.r+b.r;if(!d||d>=min)return;const nx=dx/d,ny=dy/d,over=min-d;a.x-=nx*over/2;a.y-=ny*over/2;b.x+=nx*over/2;b.y+=ny*over/2;const rvx=b.vx-a.vx,rvy=b.vy-a.vy,vel=rvx*nx+rvy*ny;if(vel>0)return;const imp=-(1+.82)*vel/2;a.vx-=imp*nx;a.vy-=imp*ny;b.vx+=imp*nx;b.vy+=imp*ny;const now=performance.now();if(Math.abs(vel)>60&&now-a.lastBallSound>100&&now-b.lastBallSound>100){soundMetal();a.lastBallSound=b.lastBallSound=now}}
+  function startFall(p){if(p.falling||p.goal)return;p.falling=true;p.fallStart=performance.now();p.vx=p.vy=0;soundFall();const c=conns.get(p.number);if(c?.open)c.send({type:'fall'})}
+
+  function update(dt){
+    if(!running)return;
+    const now=performance.now();
+    for(const p of players.values()){
+      if(p.goal)continue;
+      if(p.falling){if(now-p.fallStart>=p.fallDuration)resetPlayer(p);continue}
+      for(const h of holes){const dx=h.x-p.x,dy=h.y-p.y,d=Math.hypot(dx,dy),pullRadius=h.r*2.3;if(d<pullRadius&&d>0){const strength=(1-d/pullRadius)*350;p.vx+=dx/d*strength*dt;p.vy+=dy/d*strength*dt}if(d<h.r*.58){startFall(p);break}}
+      if(p.falling)continue;
+      p.vx+=p.inputX*430*dt;p.vy+=p.inputY*430*dt;p.vx*=Math.pow(.986,dt*60);p.vy*=Math.pow(.986,dt*60);const sp=Math.hypot(p.vx,p.vy);if(sp>500){p.vx=p.vx/sp*500;p.vy=p.vy/sp*500}p.x+=p.vx*dt;p.y+=p.vy*dt;
+      for(const w of walls)resolveWall(p,w);
+      if(Math.hypot(p.x-goal.x,p.y-goal.y)<goal.r*.65){p.goal=true;p.vx=p.vy=0;finishers.push(p.number);ranking.textContent='ゴール：'+finishers.map((n,i)=>`${i+1}位 P${n}`).join(' / ');soundCup();const c=conns.get(p.number);if(c?.open)c.send({type:'goal'});if(finishers.length===players.size&&players.size>0){running=false;overlayTitle.textContent='全員カップイン！';overlayText.textContent=ranking.textContent;overlay.style.display='flex'}}
+    }
+    const active=[...players.values()].filter(p=>!p.goal&&!p.falling);for(let i=0;i<active.length;i++)for(let j=i+1;j<active.length;j++)collide(active[i],active[j]);
   }
+
+  function drawVortex(h){const grad=ctx.createRadialGradient(h.x,h.y,2,h.x,h.y,h.r*1.35);grad.addColorStop(0,'#000');grad.addColorStop(.55,'#050505');grad.addColorStop(1,'rgba(0,0,0,0)');ctx.beginPath();ctx.arc(h.x,h.y,h.r*1.35,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();ctx.save();ctx.strokeStyle='rgba(255,255,255,.23)';ctx.lineWidth=1.3;for(let k=0;k<8;k++){ctx.beginPath();const phase=k*Math.PI/4;for(let t=0;t<Math.PI*4;t+=.13){const rr=h.r*1.5*(1-t/(Math.PI*4)),ang=t+phase,x=h.x+Math.cos(ang)*rr,y=h.y+Math.sin(ang)*rr*.55;if(t===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.stroke()}ctx.restore()}
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);ctx.fillStyle='#0a0d12';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(ox,oy);ctx.scale(scale,scale);
+    ctx.fillStyle='#d7cfb3';ctx.fillRect(0,0,BOARD_W,BOARD_H);
+    ctx.fillStyle='#d9e5ff';ctx.fillRect(start.x-30,start.y-24,60,48);ctx.fillStyle='#17304f';ctx.font='700 13px system-ui';ctx.textAlign='center';ctx.fillText('START',start.x,start.y+4);
+    ctx.beginPath();ctx.arc(goal.x,goal.y,goal.r+7,0,Math.PI*2);ctx.fillStyle='#7abf6b';ctx.fill();ctx.beginPath();ctx.arc(goal.x,goal.y,goal.r,0,Math.PI*2);ctx.fillStyle='#080808';ctx.fill();
+    ctx.fillStyle='#4f5968';for(const w of walls)ctx.fillRect(w.x,w.y,w.w,w.h);
+    for(const h of holes)drawVortex(h);
+    for(const p of players.values()){if(p.goal)continue;let rr=p.r,alpha=1;if(p.falling){const t=Math.min(1,(performance.now()-p.fallStart)/p.fallDuration);rr=p.r*(1-t*.9);alpha=1-t*.85}ctx.save();ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(p.x,p.y,rr,0,Math.PI*2);ctx.fillStyle=`hsl(${(p.number-1)*36} 72% 52%)`;ctx.fill();ctx.strokeStyle='#111';ctx.lineWidth=2;ctx.stroke();if(rr>6){ctx.fillStyle='#fff';ctx.font='700 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(p.number),p.x,p.y)}ctx.restore()}
+    ctx.restore();
+  }
+
+  function broadcastState(now){if(now-lastStateSend<50)return;lastStateSend=now;const state={type:'state',walls,holes,goal,players:[...players.values()].map(p=>({number:p.number,x:p.x,y:p.y,r:p.r,goal:p.goal,falling:p.falling}))};for(const c of conns.values())if(c.open)c.send(state)}
+  function loop(now){const dt=Math.min((now-last)/1000,.033);last=now;update(dt);draw();broadcastState(now);requestAnimationFrame(loop)}
+  resetBtn.onclick=()=>{ensureAudio();resetAll()};
+  startBtn.onclick=()=>{ensureAudio();finishers.length=0;for(const p of players.values())resetPlayer(p);ranking.textContent='ゴール：なし';running=true;overlayTitle.textContent='START!';overlayText.textContent='';overlay.style.display='flex';setTimeout(()=>overlay.style.display='none',700)};
+  addEventListener('resize',resize);resize();requestAnimationFrame(loop);
+}
 })();
 </script>
+</body>
+</html>
