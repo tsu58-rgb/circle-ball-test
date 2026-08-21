@@ -140,7 +140,45 @@ function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight
 function positionTeam(arr,side){const spacing=Math.max(34,boardR*.18);arr.forEach((p,i)=>{const off=(i-(arr.length-1)/2)*spacing;p.x=cx+side*boardR*.42;p.y=cy+off;p.r=Math.max(14,Math.min(W,H)*.024)})}
 function resetPositions(){positionTeam([...players.values()].filter(p=>p.team==='red').sort((a,b)=>a.number-b.number),-1);positionTeam([...players.values()].filter(p=>p.team==='blue').sort((a,b)=>a.number-b.number),1);for(const p of players.values()){p.vx=0;p.vy=0;p.inputX=0;p.inputY=0;p.alive=true}gameEnded=false;if(pendingWinnerTimer){clearTimeout(pendingWinnerTimer);pendingWinnerTimer=null}messageOverlay.style.display='none';for(const c of slotConns.values())if(c.open)c.send({type:'reset'});updateHud()}
 function ensureAudio(){try{if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioCtx=new AC()}if(audioCtx?.state==='suspended')audioCtx.resume()}catch(e){}}
-function playCollisionSound(strength=1){ensureAudio();if(!audioCtx)return;const now=audioCtx.currentTime,osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type='square';osc.frequency.setValueAtTime(190+Math.min(220,strength*120),now);osc.frequency.exponentialRampToValueAtTime(90,now+.06);gain.gain.setValueAtTime(Math.min(.11,.03+strength*.025),now);gain.gain.exponentialRampToValueAtTime(.001,now+.07);osc.connect(gain).connect(audioCtx.destination);osc.start(now);osc.stop(now+.075)}
+function playCollisionSound(strength=1){
+  ensureAudio();
+  if(!audioCtx)return;
+  const now=audioCtx.currentTime;
+  const master=audioCtx.createGain();
+  master.gain.setValueAtTime(Math.min(.18,.055+strength*.03),now);
+  master.gain.exponentialRampToValueAtTime(.001,now+.24);
+  master.connect(audioCtx.destination);
+
+  // 金属同士が「カンッ」と当たるような複数の高周波成分
+  [1180,1760,2470,3310].forEach((freq,i)=>{
+    const osc=audioCtx.createOscillator();
+    const gain=audioCtx.createGain();
+    osc.type=i%2===0?'triangle':'sine';
+    osc.frequency.setValueAtTime(freq+(strength*35),now);
+    osc.frequency.exponentialRampToValueAtTime(freq*.88,now+.16+i*.015);
+    gain.gain.setValueAtTime([.7,.48,.30,.18][i],now);
+    gain.gain.exponentialRampToValueAtTime(.001,now+.12+i*.025);
+    osc.connect(gain).connect(master);
+    osc.start(now);
+    osc.stop(now+.22);
+  });
+
+  // 短い打撃ノイズ
+  const len=Math.floor(audioCtx.sampleRate*.035);
+  const buffer=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+  const data=buffer.getChannelData(0);
+  for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*(1-i/len);
+  const noise=audioCtx.createBufferSource();
+  const filter=audioCtx.createBiquadFilter();
+  const ng=audioCtx.createGain();
+  noise.buffer=buffer;
+  filter.type='highpass';
+  filter.frequency.value=1500;
+  ng.gain.setValueAtTime(.22,now);
+  ng.gain.exponentialRampToValueAtTime(.001,now+.04);
+  noise.connect(filter).connect(ng).connect(master);
+  noise.start(now);
+}
 function playFallSound(){ensureAudio();if(!audioCtx)return;const now=audioCtx.currentTime,osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type='sine';osc.frequency.setValueAtTime(430,now);osc.frequency.exponentialRampToValueAtTime(85,now+.5);gain.gain.setValueAtTime(.13,now);gain.gain.exponentialRampToValueAtTime(.001,now+.52);osc.connect(gain).connect(audioCtx.destination);osc.start(now);osc.stop(now+.54)}
 function updateHud(){const r=[...players.values()].filter(p=>p.team==='red'&&p.alive).length,b=[...players.values()].filter(p=>p.team==='blue'&&p.alive).length;scoreBox.textContent=`赤 ${r}/5　青 ${b}/5`;playerList.textContent=[...players.values()].sort((a,b)=>a.team.localeCompare(b.team)||a.number-b.number).map(p=>`${p.team==='red'?'赤':'青'}${p.number}${p.alive?'':'×'}`).join('　')||'参加者待機中'}
 function checkWinner(){if(gameEnded||!gameRunning)return;const rt=[...players.values()].filter(p=>p.team==='red').length,bt=[...players.values()].filter(p=>p.team==='blue').length;if(!rt||!bt)return;const r=[...players.values()].filter(p=>p.team==='red'&&(p.alive||p.falling)).length,b=[...players.values()].filter(p=>p.team==='blue'&&(p.alive||p.falling)).length;if(r===0||b===0){gameEnded=true;gameRunning=false;const title=r===0&&b===0?'DRAW':r===0?'青チーム WIN!':'赤チーム WIN!';if(pendingWinnerTimer)clearTimeout(pendingWinnerTimer);pendingWinnerTimer=setTimeout(()=>{overlayTitle.textContent=title;overlaySub.textContent='リセットしてもう一度遊べます';messageOverlay.style.display='flex';pendingWinnerTimer=null},2000)}}
