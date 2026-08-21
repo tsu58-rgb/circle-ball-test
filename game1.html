@@ -10,14 +10,31 @@
 </style>
 </head>
 <body>
-<section id="home"><div class="panel"><h1>5対5 円板ボールバトル</h1><div class="card"><p>PCで共通円盤を開き、各スマホは赤/青と番号を選ぶだけで同じ円盤に参加します。</p><div class="row"><button id="openHost" class="big">PC：ゲーム本体を開く</button><button id="openController" class="big secondary">スマホ：参加する</button></div></div></div></section>
-<section id="controller" class="hidden"><div class="panel"><h2>スマホコントローラー</h2><div id="joinCard" class="card"><div class="row"><div><label for="teamSelect">チーム</label><select id="teamSelect"><option value="red">赤</option><option value="blue">青</option></select></div><div><label for="numSelect">番号</label><select id="numSelect"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div></div><button id="connectBtn" class="big" style="width:100%;margin-top:14px">共通円盤に参加</button><div id="connectStatus" class="status">未接続</div></div><div id="controlCard" class="card hidden"><div id="teamBadge" class="teamBadge"></div><button id="sensorBtn" class="big" style="width:100%;margin-top:14px">傾きセンサーを開始</button><button id="recalibrateBtn" class="secondary" style="width:100%;margin-top:8px">今の角度を水平基準にする</button><div id="tilt" class="status">左右 0.0° / 前後 0.0°</div><div id="wakeStatus" class="status">画面スリープ防止：未開始</div><div id="pad"><div id="dot"></div></div><p class="small">スマホを傾けると、PC画面上の自分のボールが動きます。</p></div></div></section>
+<section id="home"><div class="panel"><h1>5対5 円板ボールバトル</h1><div class="card"><p>PCで共通円盤を開き、各スマホは赤/青と番号を選ぶだけで同じ円盤に参加します。</p><div class="row"><button id="openHost" class="big">ゲーム画面のみ表示</button><button id="openController" class="big secondary">ゲームに参加する</button></div></div></div></section>
+<section id="controller" class="hidden">
+  <div style="height:42vh;min-height:260px;background:#090b0f;position:relative;border-bottom:1px solid #333">
+    <canvas id="spectatorCanvas1" style="width:100%;height:100%;display:block"></canvas>
+    <div style="position:absolute;left:10px;top:10px;background:rgba(0,0,0,.6);padding:6px 9px;border-radius:8px;font-size:12px">ゲーム画面</div>
+  </div><div class="panel"><h2>スマホコントローラー</h2><div id="joinCard" class="card"><div class="row"><div><label for="teamSelect">チーム</label><select id="teamSelect"><option value="red">赤</option><option value="blue">青</option></select></div><div><label for="numSelect">番号</label><select id="numSelect"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div></div><button id="connectBtn" class="big" style="width:100%;margin-top:14px">共通円盤に参加</button><div id="connectStatus" class="status">未接続</div></div><div id="controlCard" class="card hidden"><div id="teamBadge" class="teamBadge"></div><button id="sensorBtn" class="big" style="width:100%;margin-top:14px">傾きセンサーを開始</button><button id="recalibrateBtn" class="secondary" style="width:100%;margin-top:8px">今の角度を水平基準にする</button><div id="tilt" class="status">左右 0.0° / 前後 0.0°</div><div id="wakeStatus" class="status">画面スリープ防止：未開始</div><div id="pad"><div id="dot"></div></div><p class="small">スマホを傾けると、PC画面上の自分のボールが動きます。</p></div></div></section>
 <section id="host" class="hidden"><canvas id="gameCanvas"></canvas><div id="hostHud"><div id="roomBox">共通円盤・接続受付中</div><div id="scoreBox">赤 0/5　青 0/5</div><div id="playerList"></div></div><div id="hostControls"><button id="resetHostBtn">リセット</button><button id="startHostBtn">試合開始</button><button id="backHomeBtn" class="secondary">戻る</button></div><div id="messageOverlay"><div class="box"><div class="title" id="overlayTitle"></div><div class="sub" id="overlaySub"></div></div></div></section>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <script>
 (()=>{
 const home=document.getElementById('home'),hostSection=document.getElementById('host'),controllerSection=document.getElementById('controller');
-const params=new URLSearchParams(location.search);const mode=params.get('mode');let hostStarted=false;
+const params=new URLSearchParams(location.search);const mode=params.get('mode');
+  const spectatorCanvas1=document.getElementById('spectatorCanvas1');
+  function drawSpectator1(d){
+    if(!spectatorCanvas1||!d)return;
+    const r=spectatorCanvas1.getBoundingClientRect(),dp=Math.min(devicePixelRatio||1,2);
+    spectatorCanvas1.width=Math.max(1,Math.round(r.width*dp));spectatorCanvas1.height=Math.max(1,Math.round(r.height*dp));
+    const g=spectatorCanvas1.getContext('2d');g.setTransform(dp,0,0,dp,0,0);
+    const w=r.width,h=r.height,sc=Math.min(w/d.W,h/d.H),ox=(w-d.W*sc)/2,oy=(h-d.H*sc)/2;
+    g.fillStyle='#090b0f';g.fillRect(0,0,w,h);g.save();g.translate(ox,oy);g.scale(sc,sc);
+    g.beginPath();g.arc(d.cx,d.cy,d.boardR,0,Math.PI*2);g.fillStyle='#d8c59d';g.fill();g.lineWidth=5;g.strokeStyle='#756344';g.stroke();
+    for(const p of d.players||[]){if(!p.alive&&!p.falling)continue;g.beginPath();g.arc(p.x,p.y,p.r,0,Math.PI*2);g.fillStyle=p.team==='red'?'#d94a43':'#3f7ddd';g.fill();g.strokeStyle='#111';g.lineWidth=2;g.stroke();g.fillStyle='#fff';g.font=`700 ${Math.max(10,p.r*.9)}px system-ui`;g.textAlign='center';g.textBaseline='middle';g.fillText(String(p.number),p.x,p.y)}
+    g.restore();
+  }
+let hostStarted=false;
 function showOnly(x){home.classList.add('hidden');hostSection.classList.add('hidden');controllerSection.classList.add('hidden');x.classList.remove('hidden')}
 document.getElementById('openHost').onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=host');showOnly(hostSection);initHost()};
 document.getElementById('openController').onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=controller');showOnly(controllerSection)};
@@ -81,6 +98,7 @@ function connectController(isReconnect=false){
       await requestWakeLock();
     });
     controllerConn.on('data',data=>{
+      if(data?.type==='state') drawSpectator1(data);
       if(data?.type==='reject'){
         reconnecting=false;
         if(isReconnect){setTimeout(()=>connectController(true),1200);return}
@@ -187,7 +205,14 @@ function finishFall(p){if(!p.falling)return;p.falling=false;p.vx=p.vy=0;updateHu
 function resolveCollision(a,b){const dx=b.x-a.x,dy=b.y-a.y;let dist=Math.hypot(dx,dy),min=a.r+b.r;if(dist===0)dist=.001;if(dist>=min)return;const nx=dx/dist,ny=dy/dist,over=min-dist;a.x-=nx*over/2;a.y-=ny*over/2;b.x+=nx*over/2;b.y+=ny*over/2;const rvx=b.vx-a.vx,rvy=b.vy-a.vy,vel=rvx*nx+rvy*ny;if(vel>0)return;const impulse=-(1+.92)*vel/2;a.vx-=impulse*nx;a.vy-=impulse*ny;b.vx+=impulse*nx;b.vy+=impulse*ny;const impact=Math.min(3,Math.abs(vel)/180),now=performance.now();if(impact>.18&&now-a.lastHitSound>90&&now-b.lastHitSound>90){playCollisionSound(impact);a.lastHitSound=b.lastHitSound=now}}
 function update(dt){const anyFalling=[...players.values()].some(p=>p.falling);if(!gameRunning&&!anyFalling)return;const acceleration=560,friction=Math.pow(.988,dt*60),maxSpeed=700,now=performance.now();for(const p of players.values()){if(p.falling){const t=Math.min(1,(now-p.fallStart)/p.fallDuration),e=t*t;p.x=p.fallStartX+p.fallVX*.22*t;p.y=p.fallStartY+p.fallVY*.22*t+150*e;p.r=Math.max(2,p.baseR*(1-t*.88));if(t>=1)finishFall(p);continue}if(!p.alive)continue;p.vx+=p.inputX*acceleration*dt;p.vy+=p.inputY*acceleration*dt;p.vx*=friction;p.vy*=friction;const sp=Math.hypot(p.vx,p.vy);if(sp>maxSpeed){p.vx=p.vx/sp*maxSpeed;p.vy=p.vy/sp*maxSpeed}p.x+=p.vx*dt;p.y+=p.vy*dt}const alive=[...players.values()].filter(p=>p.alive&&!p.falling);for(let i=0;i<alive.length;i++)for(let j=i+1;j<alive.length;j++)resolveCollision(alive[i],alive[j]);for(const p of alive)if(Math.hypot(p.x-cx,p.y-cy)>boardR+p.r*.45)eliminate(p)}
 function draw(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#090b0f';ctx.fillRect(0,0,W,H);ctx.beginPath();ctx.arc(cx+10,cy+14,boardR,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.45)';ctx.fill();ctx.beginPath();ctx.arc(cx,cy,boardR,0,Math.PI*2);ctx.fillStyle='#d8c59d';ctx.fill();ctx.lineWidth=5;ctx.strokeStyle='#756344';ctx.stroke();for(const p of players.values()){if(!p.alive&&!p.falling)continue;let alpha=1;if(p.falling){const t=Math.min(1,(performance.now()-p.fallStart)/p.fallDuration);alpha=1-t*.82}ctx.save();ctx.globalAlpha=alpha;ctx.beginPath();ctx.ellipse(p.x+6,p.y+8,p.r*.9,p.r*.5,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.24)';ctx.fill();ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.team==='red'?'#d94a43':'#3f7ddd';ctx.fill();ctx.lineWidth=2.5;ctx.strokeStyle=p.team==='red'?'#741f1b':'#173e7b';ctx.stroke();if(p.r>8){ctx.fillStyle='#fff';ctx.font=`700 ${Math.max(10,p.r*.9)}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(p.number),p.x,p.y+1)}ctx.restore()}}
-function loop(now){const dt=Math.min((now-last)/1000,.033);last=now;update(dt);draw();requestAnimationFrame(loop)}
+let lastStateSend=0;
+    function broadcastState(now){
+      if(now-lastStateSend<50)return;
+      lastStateSend=now;
+      const state=[...players.values()].map(p=>({team:p.team,number:p.number,x:p.x,y:p.y,r:p.r,alive:p.alive,falling:p.falling}));
+      for(const c of slotConns.values())if(c.open)c.send({type:'state',cx,cy,boardR,W,H,players:state});
+    }
+    function loop(now){const dt=Math.min((now-last)/1000,.033);last=now;update(dt);draw();broadcastState(now);requestAnimationFrame(loop)}
 resetBtn.onclick=()=>{ensureAudio();gameRunning=false;resetPositions()};startBtn.onclick=()=>{ensureAudio();resetPositions();gameRunning=true;overlayTitle.textContent='START!';overlaySub.textContent='';messageOverlay.style.display='flex';setTimeout(()=>messageOverlay.style.display='none',700)};addEventListener('resize',resize);resize();requestAnimationFrame(loop)}
 })();
 </script>
