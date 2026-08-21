@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>円板ボールゲーム</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;width:100%;height:100%;overflow:hidden;
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#101214;color:#fff;
+  }
+  body{display:flex;align-items:center;justify-content:center}
+  #app{position:relative;width:100%;height:100%;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  #hud{
+    position:absolute;left:10px;top:10px;z-index:5;
+    padding:8px 10px;border-radius:10px;
+    background:rgba(0,0,0,.55);
+    font-size:12px;line-height:1.55;
+  }
+  #controls{
+    position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
+    display:flex;gap:10px;z-index:5;
+  }
+  button{
+    border:0;border-radius:12px;padding:12px 16px;
+    font-size:15px;font-weight:700;
+    background:#fff;color:#111;
+  }
+  #overlay{
+    position:absolute;inset:0;z-index:4;
+    display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.42);
+    text-align:center;
+  }
+  #overlayBox{
+    padding:18px 24px;border-radius:14px;
+    background:rgba(0,0,0,.78);
+  }
+  #overlayTitle{font-size:28px;font-weight:800;margin-bottom:6px}
+  #overlayText{font-size:14px;opacity:.9}
+  #message{
+    position:absolute;left:50%;top:14px;transform:translateX(-50%);
+    z-index:5;padding:7px 10px;border-radius:10px;
+    background:rgba(0,0,0,.55);
+    font-size:12px;white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    左右: <span id="gx">0.0</span>°<br>
+    前後: <span id="gy">0.0</span>°<br>
+    状態: <span id="state">待機</span>
+  </div>
+
+  <div id="message">PCは矢印キーでもテストできます</div>
+
+  <div id="controls">
+    <button id="startBtn" type="button">センサー開始</button>
+    <button id="resetBtn" type="button">リセット</button>
+  </div>
+
+  <div id="overlay">
+    <div id="overlayBox">
+      <div id="overlayTitle">GAME OVER</div>
+      <div id="overlayText">ボールが円板から落ちました</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  const gxEl = document.getElementById('gx');
+  const gyEl = document.getElementById('gy');
+  const stateEl = document.getElementById('state');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const overlay = document.getElementById('overlay');
+  const message = document.getElementById('message');
+
+  let W = 0;
+  let H = 0;
+  let DPR = 1;
+
+  let boardX = 0;
+  let boardY = 0;
+  let boardR = 0;
+
+  const ball = {
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    r: 16
+  };
+
+  let gameOver = false;
+
+  let rawGamma = 0;
+  let rawBeta = 0;
+  let baseGamma = 0;
+  let baseBeta = 0;
+  let calibrated = false;
+
+  let keyX = 0;
+  let keyY = 0;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    boardX = W / 2;
+    boardY = H / 2;
+    boardR = Math.min(W, H) * 0.38;
+
+    if (!gameOver) {
+      const dx = ball.x - boardX;
+      const dy = ball.y - boardY;
+      const dist = Math.hypot(dx, dy);
+
+      if (!ball.x || !ball.y || dist > boardR - ball.r) {
+        resetGame();
+      }
+    }
+  }
+
+  function resetGame() {
+    ball.x = boardX;
+    ball.y = boardY;
+    ball.vx = 0;
+    ball.vy = 0;
+    gameOver = false;
+    overlay.style.display = 'none';
+    stateEl.textContent = calibrated ? 'プレイ中' : '待機';
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function normalizeDelta(value, base) {
+    let d = value - base;
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    return d;
+  }
+
+  function orientationHandler(event) {
+    if (typeof event.gamma === 'number') rawGamma = event.gamma;
+    if (typeof event.beta === 'number') rawBeta = event.beta;
+
+    if (!calibrated) return;
+
+    const dx = clamp(normalizeDelta(rawGamma, baseGamma), -35, 35);
+    const dy = clamp(normalizeDelta(rawBeta, baseBeta), -35, 35);
+
+    gxEl.textContent = dx.toFixed(1);
+    gyEl.textContent = dy.toFixed(1);
+  }
+
+  async function startSensor() {
+    try {
+      if (typeof DeviceOrientationEvent === 'undefined') {
+        message.textContent = 'この端末では傾きセンサーを利用できません';
+        return;
+      }
+
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const permission = await DeviceOrientationEvent.requestPermission();
+        if (permission !== 'granted') {
+          message.textContent = 'センサー利用が許可されませんでした';
+          return;
+        }
+      }
+
+      window.addEventListener('deviceorientation', orientationHandler, true);
+
+      setTimeout(() => {
+        baseGamma = rawGamma;
+        baseBeta = rawBeta;
+        calibrated = true;
+        startBtn.textContent = '基準角度を再設定';
+        stateEl.textContent = 'プレイ中';
+        message.textContent = '今の持ち方を水平基準にしました';
+        resetGame();
+      }, 350);
+
+    } catch (error) {
+      message.textContent = 'センサー開始エラー: ' + error.message;
+    }
+  }
+
+  function recalibrate() {
+    baseGamma = rawGamma;
+    baseBeta = rawBeta;
+    calibrated = true;
+    stateEl.textContent = 'プレイ中';
+    message.textContent = '現在の持ち方を基準角度に再設定しました';
+    resetGame();
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (calibrated) {
+      recalibrate();
+    } else {
+      startSensor();
+    }
+  });
+
+  resetBtn.addEventListener('click', resetGame);
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowLeft') keyX = -1;
+    if (event.key === 'ArrowRight') keyX = 1;
+    if (event.key === 'ArrowUp') keyY = -1;
+    if (event.key === 'ArrowDown') keyY = 1;
+  });
+
+  window.addEventListener('keyup', (event) => {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') keyX = 0;
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') keyY = 0;
+  });
+
+  let lastTime = performance.now();
+
+  function update(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.033);
+    lastTime = now;
+
+    if (gameOver) return;
+
+    let tiltX = 0;
+    let tiltY = 0;
+
+    if (calibrated) {
+      tiltX = clamp(normalizeDelta(rawGamma, baseGamma), -30, 30) / 18;
+      tiltY = clamp(normalizeDelta(rawBeta, baseBeta), -30, 30) / 18;
+    }
+
+    tiltX += keyX * 1.8;
+    tiltY += keyY * 1.8;
+
+    const acceleration = 460;
+
+    ball.vx += tiltX * acceleration * dt;
+    ball.vy += tiltY * acceleration * dt;
+
+    const friction = Math.pow(0.987, dt * 60);
+    ball.vx *= friction;
+    ball.vy *= friction;
+
+    const maxSpeed = 760;
+    const speed = Math.hypot(ball.vx, ball.vy);
+
+    if (speed > maxSpeed) {
+      ball.vx = (ball.vx / speed) * maxSpeed;
+      ball.vy = (ball.vy / speed) * maxSpeed;
+    }
+
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    const dx = ball.x - boardX;
+    const dy = ball.y - boardY;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance > boardR + ball.r * 0.15) {
+      gameOver = true;
+      stateEl.textContent = '落下';
+      overlay.style.display = 'flex';
+    }
+  }
+
+  function drawBoard() {
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.fillStyle = '#101214';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.beginPath();
+    ctx.arc(boardX + 8, boardY + 12, boardR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(boardX, boardY, boardR, 0, Math.PI * 2);
+    ctx.fillStyle = '#d9c79e';
+    ctx.fill();
+
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#7b6847';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(boardX, boardY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(70,55,35,.35)';
+    ctx.fill();
+  }
+
+  function drawBall() {
+    ctx.beginPath();
+    ctx.ellipse(
+      ball.x + 7,
+      ball.y + 9,
+      ball.r * 0.95,
+      ball.r * 0.55,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fillStyle = 'rgba(0,0,0,.28)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#d44736';
+    ctx.fill();
+
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#721d16';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(ball.x - 6, ball.y - 7, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,.75)';
+    ctx.fill();
+  }
+
+  function loop(now) {
+    update(now);
+    drawBoard();
+    drawBall();
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', resize);
+
+  resize();
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
