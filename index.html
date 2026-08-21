@@ -3,357 +3,52 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>円板ボールゲーム</title>
+<title>5対5 円板ボールバトル</title>
 <style>
-  *{box-sizing:border-box}
-  html,body{
-    margin:0;width:100%;height:100%;overflow:hidden;
-    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    background:#101214;color:#fff;
-  }
-  body{display:flex;align-items:center;justify-content:center}
-  #app{position:relative;width:100%;height:100%;overflow:hidden}
-  canvas{display:block;width:100%;height:100%;touch-action:none}
-  #hud{
-    position:absolute;left:10px;top:10px;z-index:5;
-    padding:8px 10px;border-radius:10px;
-    background:rgba(0,0,0,.55);
-    font-size:12px;line-height:1.55;
-  }
-  #controls{
-    position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
-    display:flex;gap:10px;z-index:5;
-  }
-  button{
-    border:0;border-radius:12px;padding:12px 16px;
-    font-size:15px;font-weight:700;
-    background:#fff;color:#111;
-  }
-  #overlay{
-    position:absolute;inset:0;z-index:4;
-    display:none;align-items:center;justify-content:center;
-    background:rgba(0,0,0,.42);
-    text-align:center;
-  }
-  #overlayBox{
-    padding:18px 24px;border-radius:14px;
-    background:rgba(0,0,0,.78);
-  }
-  #overlayTitle{font-size:28px;font-weight:800;margin-bottom:6px}
-  #overlayText{font-size:14px;opacity:.9}
-  #message{
-    position:absolute;left:50%;top:14px;transform:translateX(-50%);
-    z-index:5;padding:7px 10px;border-radius:10px;
-    background:rgba(0,0,0,.55);
-    font-size:12px;white-space:nowrap;
-  }
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f1115;color:#fff}button,input,select{font:inherit}button{cursor:pointer}.hidden{display:none!important}#home,#controller,#host{min-height:100vh}.panel{max-width:760px;margin:0 auto;padding:20px}.card{background:#1a1d24;border:1px solid #2a2f3a;border-radius:14px;padding:16px;margin:12px 0}h1,h2{margin:0 0 14px}p{line-height:1.6}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 160px}label{display:block;margin:10px 0 6px}input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #39404d;background:#11151b;color:#fff}button{border:0;border-radius:12px;padding:12px 16px;font-weight:700;background:#fff;color:#111}button.secondary{background:#2a303b;color:#fff}.big{font-size:20px;padding:16px 20px}.status{padding:10px 12px;border-radius:10px;background:#11151b;margin-top:10px}#host{position:relative;overflow:hidden;height:100vh;background:#090b0f}#gameCanvas{position:absolute;inset:0;width:100%;height:100%;display:block}#hostHud{position:absolute;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.62);padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5}#hostControls{position:absolute;right:12px;top:12px;z-index:5;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}#roomBox{font-size:20px;font-weight:800;letter-spacing:.06em}#scoreBox{margin-top:6px}#messageOverlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:4;background:rgba(0,0,0,.35);text-align:center}#messageOverlay .box{background:rgba(0,0,0,.78);padding:22px 28px;border-radius:16px}#messageOverlay .title{font-size:32px;font-weight:900}#messageOverlay .sub{margin-top:8px}#controller .teamBadge{font-size:28px;font-weight:900;text-align:center;padding:16px;border-radius:14px}#controller .teamBadge.red{background:#7d2421}#controller .teamBadge.blue{background:#1e4f95}#tilt{font-size:18px;text-align:center;line-height:1.7}#pad{height:190px;border-radius:20px;background:#151922;border:1px solid #2d3440;display:flex;align-items:center;justify-content:center;margin-top:14px;position:relative;overflow:hidden}#dot{width:34px;height:34px;border-radius:50%;background:#fff;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}.small{font-size:12px;opacity:.78}
+@media(max-width:600px){.panel{padding:14px}#hostControls button{padding:9px 10px;font-size:12px}#hostHud{font-size:11px}}
 </style>
 </head>
 <body>
-<div id="app">
-  <canvas id="game"></canvas>
-
-  <div id="hud">
-    左右: <span id="gx">0.0</span>°<br>
-    前後: <span id="gy">0.0</span>°<br>
-    状態: <span id="state">待機</span>
-  </div>
-
-  <div id="message">PCは矢印キーでもテストできます</div>
-
-  <div id="controls">
-    <button id="startBtn" type="button">センサー開始</button>
-    <button id="resetBtn" type="button">リセット</button>
-  </div>
-
-  <div id="overlay">
-    <div id="overlayBox">
-      <div id="overlayTitle">GAME OVER</div>
-      <div id="overlayText">ボールが円板から落ちました</div>
-    </div>
-  </div>
-</div>
-
+<section id="home"><div class="panel"><h1>5対5 円板ボールバトル</h1><div class="card"><p>PCは「ゲーム本体」、各スマホは「コントローラー」として使います。</p><div class="row"><button id="openHost" class="big">PC：ゲーム本体を開く</button><button id="openController" class="big secondary">スマホ：参加する</button></div></div></div></section>
+<section id="controller" class="hidden"><div class="panel"><h2>スマホコントローラー</h2><div id="joinCard" class="card"><label for="roomInput">ルームID</label><input id="roomInput" placeholder="PC画面に表示されたID"><div class="row"><div><label for="teamSelect">チーム</label><select id="teamSelect"><option value="red">赤</option><option value="blue">青</option></select></div><div><label for="numSelect">番号</label><select id="numSelect"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div></div><button id="connectBtn" class="big" style="width:100%;margin-top:14px">接続する</button><div id="connectStatus" class="status">未接続</div></div><div id="controlCard" class="card hidden"><div id="teamBadge" class="teamBadge"></div><button id="sensorBtn" class="big" style="width:100%;margin-top:14px">傾きセンサーを開始</button><button id="recalibrateBtn" class="secondary" style="width:100%;margin-top:8px">今の角度を水平基準にする</button><div id="tilt" class="status">左右 0.0° / 前後 0.0°</div><div id="pad"><div id="dot"></div></div><p class="small">スマホを傾けると、PC画面上の自分のボールが動きます。</p></div></div></section>
+<section id="host" class="hidden"><canvas id="gameCanvas"></canvas><div id="hostHud"><div>ルームID</div><div id="roomBox">接続準備中...</div><div id="scoreBox">赤 0/5　青 0/5</div><div id="playerList"></div></div><div id="hostControls"><button id="resetHostBtn">リセット</button><button id="startHostBtn">試合開始</button><button id="backHomeBtn" class="secondary">戻る</button></div><div id="messageOverlay"><div class="box"><div class="title" id="overlayTitle"></div><div class="sub" id="overlaySub"></div></div></div></section>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <script>
-(() => {
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+(()=>{
+const home=document.getElementById('home'),hostSection=document.getElementById('host'),controllerSection=document.getElementById('controller');
+const params=new URLSearchParams(location.search);const mode=params.get('mode');let hostStarted=false;
+function showOnly(x){home.classList.add('hidden');hostSection.classList.add('hidden');controllerSection.classList.add('hidden');x.classList.remove('hidden')}
+document.getElementById('openHost').onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=host');showOnly(hostSection);initHost()};
+document.getElementById('openController').onclick=()=>{history.replaceState(null,'',location.pathname+'?mode=controller');showOnly(controllerSection)};
+document.getElementById('backHomeBtn').onclick=()=>location.href=location.pathname;
+if(mode==='host'){showOnly(hostSection);setTimeout(initHost,0)}else if(mode==='controller'){showOnly(controllerSection)}
 
-  const gxEl = document.getElementById('gx');
-  const gyEl = document.getElementById('gy');
-  const stateEl = document.getElementById('state');
-  const startBtn = document.getElementById('startBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const overlay = document.getElementById('overlay');
-  const message = document.getElementById('message');
+// controller
+const roomInput=document.getElementById('roomInput'),teamSelect=document.getElementById('teamSelect'),numSelect=document.getElementById('numSelect'),connectBtn=document.getElementById('connectBtn'),connectStatus=document.getElementById('connectStatus'),joinCard=document.getElementById('joinCard'),controlCard=document.getElementById('controlCard'),sensorBtn=document.getElementById('sensorBtn'),recalibrateBtn=document.getElementById('recalibrateBtn'),teamBadge=document.getElementById('teamBadge'),tiltEl=document.getElementById('tilt'),dot=document.getElementById('dot');
+let controllerPeer=null,controllerConn=null,sensorActive=false,rawGamma=0,rawBeta=0,baseGamma=0,baseBeta=0,lastSend=0;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const deltaAngle=(v,b)=>{let d=v-b;while(d>180)d-=360;while(d<-180)d+=360;return d};
+connectBtn.onclick=()=>{const room=roomInput.value.trim();if(!room){connectStatus.textContent='ルームIDを入力してください';return}connectStatus.textContent='接続中...';controllerPeer=new Peer();controllerPeer.on('open',()=>{controllerConn=controllerPeer.connect(room,{reliable:true});controllerConn.on('open',()=>{const team=teamSelect.value,number=Number(numSelect.value);controllerConn.send({type:'join',team,number});teamBadge.textContent=(team==='red'?'赤':'青')+number;teamBadge.className='teamBadge '+team;joinCard.classList.add('hidden');controlCard.classList.remove('hidden');connectStatus.textContent='接続済み'});controllerConn.on('data',data=>{if(data?.type==='reject'){alert(data.message||'この番号は使用中です');location.reload()}if(data?.type==='eliminated')tiltEl.textContent='脱落しました';if(data?.type==='reset')tiltEl.textContent='左右 0.0° / 前後 0.0°'});controllerConn.on('close',()=>connectStatus.textContent='接続が切れました')})};
+function sendTilt(now){if(!controllerConn?.open||!sensorActive||now-lastSend<33)return;lastSend=now;const x=clamp(deltaAngle(rawGamma,baseGamma),-30,30),y=clamp(deltaAngle(rawBeta,baseBeta),-30,30);tiltEl.textContent=`左右 ${x.toFixed(1)}° / 前後 ${y.toFixed(1)}°`;const px=clamp(x/30,-1,1)*65,py=clamp(y/30,-1,1)*65;dot.style.transform=`translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;controllerConn.send({type:'tilt',x:x/30,y:y/30})}
+function orientationHandler(e){if(typeof e.gamma==='number')rawGamma=e.gamma;if(typeof e.beta==='number')rawBeta=e.beta;sendTilt(performance.now())}
+sensorBtn.onclick=async()=>{try{if(typeof DeviceOrientationEvent==='undefined'){alert('この端末では傾きセンサーを利用できません');return}if(typeof DeviceOrientationEvent.requestPermission==='function'){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted'){alert('傾きセンサーが許可されませんでした');return}}window.addEventListener('deviceorientation',orientationHandler,true);sensorActive=true;setTimeout(()=>{baseGamma=rawGamma;baseBeta=rawBeta;sensorBtn.textContent='センサー接続済み'},300)}catch(e){alert('センサー開始エラー: '+e.message)}};
+recalibrateBtn.onclick=()=>{baseGamma=rawGamma;baseBeta=rawBeta};
 
-  let W = 0;
-  let H = 0;
-  let DPR = 1;
-
-  let boardX = 0;
-  let boardY = 0;
-  let boardR = 0;
-
-  const ball = {
-    x: 0,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    r: 16
-  };
-
-  let gameOver = false;
-
-  let rawGamma = 0;
-  let rawBeta = 0;
-  let baseGamma = 0;
-  let baseBeta = 0;
-  let calibrated = false;
-
-  let keyX = 0;
-  let keyY = 0;
-
-  function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
-    W = window.innerWidth;
-    H = window.innerHeight;
-
-    canvas.width = Math.round(W * DPR);
-    canvas.height = Math.round(H * DPR);
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-
-    boardX = W / 2;
-    boardY = H / 2;
-    boardR = Math.min(W, H) * 0.38;
-
-    if (!gameOver) {
-      const dx = ball.x - boardX;
-      const dy = ball.y - boardY;
-      const dist = Math.hypot(dx, dy);
-
-      if (!ball.x || !ball.y || dist > boardR - ball.r) {
-        resetGame();
-      }
-    }
-  }
-
-  function resetGame() {
-    ball.x = boardX;
-    ball.y = boardY;
-    ball.vx = 0;
-    ball.vy = 0;
-    gameOver = false;
-    overlay.style.display = 'none';
-    stateEl.textContent = calibrated ? 'プレイ中' : '待機';
-  }
-
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  function normalizeDelta(value, base) {
-    let d = value - base;
-    while (d > 180) d -= 360;
-    while (d < -180) d += 360;
-    return d;
-  }
-
-  function orientationHandler(event) {
-    if (typeof event.gamma === 'number') rawGamma = event.gamma;
-    if (typeof event.beta === 'number') rawBeta = event.beta;
-
-    if (!calibrated) return;
-
-    const dx = clamp(normalizeDelta(rawGamma, baseGamma), -35, 35);
-    const dy = clamp(normalizeDelta(rawBeta, baseBeta), -35, 35);
-
-    gxEl.textContent = dx.toFixed(1);
-    gyEl.textContent = dy.toFixed(1);
-  }
-
-  async function startSensor() {
-    try {
-      if (typeof DeviceOrientationEvent === 'undefined') {
-        message.textContent = 'この端末では傾きセンサーを利用できません';
-        return;
-      }
-
-      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-        const permission = await DeviceOrientationEvent.requestPermission();
-        if (permission !== 'granted') {
-          message.textContent = 'センサー利用が許可されませんでした';
-          return;
-        }
-      }
-
-      window.addEventListener('deviceorientation', orientationHandler, true);
-
-      setTimeout(() => {
-        baseGamma = rawGamma;
-        baseBeta = rawBeta;
-        calibrated = true;
-        startBtn.textContent = '基準角度を再設定';
-        stateEl.textContent = 'プレイ中';
-        message.textContent = '今の持ち方を水平基準にしました';
-        resetGame();
-      }, 350);
-
-    } catch (error) {
-      message.textContent = 'センサー開始エラー: ' + error.message;
-    }
-  }
-
-  function recalibrate() {
-    baseGamma = rawGamma;
-    baseBeta = rawBeta;
-    calibrated = true;
-    stateEl.textContent = 'プレイ中';
-    message.textContent = '現在の持ち方を基準角度に再設定しました';
-    resetGame();
-  }
-
-  startBtn.addEventListener('click', () => {
-    if (calibrated) {
-      recalibrate();
-    } else {
-      startSensor();
-    }
-  });
-
-  resetBtn.addEventListener('click', resetGame);
-
-  window.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowLeft') keyX = -1;
-    if (event.key === 'ArrowRight') keyX = 1;
-    if (event.key === 'ArrowUp') keyY = -1;
-    if (event.key === 'ArrowDown') keyY = 1;
-  });
-
-  window.addEventListener('keyup', (event) => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') keyX = 0;
-    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') keyY = 0;
-  });
-
-  let lastTime = performance.now();
-
-  function update(now) {
-    const dt = Math.min((now - lastTime) / 1000, 0.033);
-    lastTime = now;
-
-    if (gameOver) return;
-
-    let tiltX = 0;
-    let tiltY = 0;
-
-    if (calibrated) {
-      tiltX = clamp(normalizeDelta(rawGamma, baseGamma), -30, 30) / 18;
-      tiltY = clamp(normalizeDelta(rawBeta, baseBeta), -30, 30) / 18;
-    }
-
-    tiltX += keyX * 1.8;
-    tiltY += keyY * 1.8;
-
-    const acceleration = 460;
-
-    ball.vx += tiltX * acceleration * dt;
-    ball.vy += tiltY * acceleration * dt;
-
-    const friction = Math.pow(0.987, dt * 60);
-    ball.vx *= friction;
-    ball.vy *= friction;
-
-    const maxSpeed = 760;
-    const speed = Math.hypot(ball.vx, ball.vy);
-
-    if (speed > maxSpeed) {
-      ball.vx = (ball.vx / speed) * maxSpeed;
-      ball.vy = (ball.vy / speed) * maxSpeed;
-    }
-
-    ball.x += ball.vx * dt;
-    ball.y += ball.vy * dt;
-
-    const dx = ball.x - boardX;
-    const dy = ball.y - boardY;
-    const distance = Math.hypot(dx, dy);
-
-    if (distance > boardR + ball.r * 0.15) {
-      gameOver = true;
-      stateEl.textContent = '落下';
-      overlay.style.display = 'flex';
-    }
-  }
-
-  function drawBoard() {
-    ctx.clearRect(0, 0, W, H);
-
-    ctx.fillStyle = '#101214';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.beginPath();
-    ctx.arc(boardX + 8, boardY + 12, boardR, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,.35)';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(boardX, boardY, boardR, 0, Math.PI * 2);
-    ctx.fillStyle = '#d9c79e';
-    ctx.fill();
-
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = '#7b6847';
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(boardX, boardY, 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(70,55,35,.35)';
-    ctx.fill();
-  }
-
-  function drawBall() {
-    ctx.beginPath();
-    ctx.ellipse(
-      ball.x + 7,
-      ball.y + 9,
-      ball.r * 0.95,
-      ball.r * 0.55,
-      0,
-      0,
-      Math.PI * 2
-    );
-    ctx.fillStyle = 'rgba(0,0,0,.28)';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
-    ctx.fillStyle = '#d44736';
-    ctx.fill();
-
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = '#721d16';
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(ball.x - 6, ball.y - 7, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,.75)';
-    ctx.fill();
-  }
-
-  function loop(now) {
-    update(now);
-    drawBoard();
-    drawBall();
-    requestAnimationFrame(loop);
-  }
-
-  window.addEventListener('resize', resize);
-
-  resize();
-  resetGame();
-  requestAnimationFrame(loop);
+// host
+function initHost(){if(hostStarted)return;hostStarted=true;const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d'),roomBox=document.getElementById('roomBox'),scoreBox=document.getElementById('scoreBox'),playerList=document.getElementById('playerList'),resetBtn=document.getElementById('resetHostBtn'),startBtn=document.getElementById('startHostBtn'),messageOverlay=document.getElementById('messageOverlay'),overlayTitle=document.getElementById('overlayTitle'),overlaySub=document.getElementById('overlaySub');let W=0,H=0,DPR=1,cx=0,cy=0,boardR=0,gameRunning=false,gameEnded=false,last=performance.now();const players=new Map(),slotConns=new Map();const peerId='circle-ball-'+Math.random().toString(36).slice(2,8);const hostPeer=new Peer(peerId);hostPeer.on('open',id=>roomBox.textContent=id);hostPeer.on('connection',conn=>{let assignedKey=null;conn.on('data',data=>{if(!data?.type)return;if(data.type==='join'){const team=data.team==='blue'?'blue':'red',number=Math.max(1,Math.min(5,Number(data.number)||1)),key=team+number;if(slotConns.has(key)){conn.send({type:'reject',message:`${team==='red'?'赤':'青'}${number} はすでに使用中です`});return}assignedKey=key;slotConns.set(key,conn);players.set(key,createBall(team,number));resetPositions();updateHud()}if(data.type==='tilt'&&assignedKey&&players.has(assignedKey)){const p=players.get(assignedKey);p.inputX=clamp(Number(data.x)||0,-1,1);p.inputY=clamp(Number(data.y)||0,-1,1)}});conn.on('close',()=>{if(assignedKey){slotConns.delete(assignedKey);players.delete(assignedKey);resetPositions();updateHud()}})});
+function createBall(team,number){return{team,number,x:cx,y:cy,vx:0,vy:0,r:Math.max(14,Math.min(W,H)*.024),inputX:0,inputY:0,alive:true}}
+function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);cx=W/2;cy=H/2;boardR=Math.min(W,H)*.39;resetPositions()}
+function positionTeam(arr,side){const spacing=Math.max(34,boardR*.18);arr.forEach((p,i)=>{const off=(i-(arr.length-1)/2)*spacing;p.x=cx+side*boardR*.42;p.y=cy+off;p.r=Math.max(14,Math.min(W,H)*.024)})}
+function resetPositions(){positionTeam([...players.values()].filter(p=>p.team==='red').sort((a,b)=>a.number-b.number),-1);positionTeam([...players.values()].filter(p=>p.team==='blue').sort((a,b)=>a.number-b.number),1);for(const p of players.values()){p.vx=0;p.vy=0;p.inputX=0;p.inputY=0;p.alive=true}gameEnded=false;messageOverlay.style.display='none';for(const c of slotConns.values())if(c.open)c.send({type:'reset'});updateHud()}
+function updateHud(){const r=[...players.values()].filter(p=>p.team==='red'&&p.alive).length,b=[...players.values()].filter(p=>p.team==='blue'&&p.alive).length;scoreBox.textContent=`赤 ${r}/5　青 ${b}/5`;playerList.textContent=[...players.values()].sort((a,b)=>a.team.localeCompare(b.team)||a.number-b.number).map(p=>`${p.team==='red'?'赤':'青'}${p.number}${p.alive?'':'×'}`).join('　')||'参加者待機中'}
+function checkWinner(){if(gameEnded||!gameRunning)return;const rt=[...players.values()].filter(p=>p.team==='red').length,bt=[...players.values()].filter(p=>p.team==='blue').length;if(!rt||!bt)return;const r=[...players.values()].filter(p=>p.team==='red'&&p.alive).length,b=[...players.values()].filter(p=>p.team==='blue'&&p.alive).length;if(r===0||b===0){gameEnded=true;gameRunning=false;messageOverlay.style.display='flex';overlayTitle.textContent=r===0&&b===0?'DRAW':r===0?'青チーム WIN!':'赤チーム WIN!';overlaySub.textContent='リセットしてもう一度遊べます'}}
+function eliminate(p){if(!p.alive)return;p.alive=false;p.vx=p.vy=0;const c=slotConns.get(p.team+p.number);if(c?.open)c.send({type:'eliminated'});updateHud();checkWinner()}
+function resolveCollision(a,b){const dx=b.x-a.x,dy=b.y-a.y;let dist=Math.hypot(dx,dy),min=a.r+b.r;if(dist===0)dist=.001;if(dist>=min)return;const nx=dx/dist,ny=dy/dist,over=min-dist;a.x-=nx*over/2;a.y-=ny*over/2;b.x+=nx*over/2;b.y+=ny*over/2;const rvx=b.vx-a.vx,rvy=b.vy-a.vy,vel=rvx*nx+rvy*ny;if(vel>0)return;const impulse=-(1+.92)*vel/2;a.vx-=impulse*nx;a.vy-=impulse*ny;b.vx+=impulse*nx;b.vy+=impulse*ny}
+function update(dt){if(!gameRunning)return;const acceleration=560,friction=Math.pow(.988,dt*60),maxSpeed=700;for(const p of players.values()){if(!p.alive)continue;p.vx+=p.inputX*acceleration*dt;p.vy+=p.inputY*acceleration*dt;p.vx*=friction;p.vy*=friction;const sp=Math.hypot(p.vx,p.vy);if(sp>maxSpeed){p.vx=p.vx/sp*maxSpeed;p.vy=p.vy/sp*maxSpeed}p.x+=p.vx*dt;p.y+=p.vy*dt}const alive=[...players.values()].filter(p=>p.alive);for(let i=0;i<alive.length;i++)for(let j=i+1;j<alive.length;j++)resolveCollision(alive[i],alive[j]);for(const p of alive)if(Math.hypot(p.x-cx,p.y-cy)>boardR+p.r*.45)eliminate(p)}
+function draw(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#090b0f';ctx.fillRect(0,0,W,H);ctx.beginPath();ctx.arc(cx+10,cy+14,boardR,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.45)';ctx.fill();ctx.beginPath();ctx.arc(cx,cy,boardR,0,Math.PI*2);ctx.fillStyle='#d8c59d';ctx.fill();ctx.lineWidth=5;ctx.strokeStyle='#756344';ctx.stroke();for(const p of players.values()){if(!p.alive)continue;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.team==='red'?'#d94a43':'#3f7ddd';ctx.fill();ctx.lineWidth=2.5;ctx.strokeStyle=p.team==='red'?'#741f1b':'#173e7b';ctx.stroke();ctx.fillStyle='#fff';ctx.font=`700 ${Math.max(12,p.r*.9)}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(p.number),p.x,p.y+1)}}
+function loop(now){const dt=Math.min((now-last)/1000,.033);last=now;update(dt);draw();requestAnimationFrame(loop)}
+resetBtn.onclick=()=>{gameRunning=false;resetPositions()};startBtn.onclick=()=>{resetPositions();gameRunning=true;overlayTitle.textContent='START!';overlaySub.textContent='';messageOverlay.style.display='flex';setTimeout(()=>messageOverlay.style.display='none',700)};addEventListener('resize',resize);resize();requestAnimationFrame(loop)}
 })();
 </script>
 </body>
