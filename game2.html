@@ -39,8 +39,8 @@ select{width:100%;padding:12px;border-radius:10px;border:1px solid #39404d;backg
     <div class="card">
       <p>PCはゲーム本体、スマホはコントローラーです。最大10人が同じ迷路を同時に走ります。</p>
       <div class="row">
-        <button id="openHost" class="primary">PC：ゲーム本体</button>
-        <button id="openController" class="secondary">スマホ：参加する</button>
+        <button id="openHost" class="primary">ゲーム画面のみ表示</button>
+        <button id="openController" class="secondary">ゲームに参加する</button>
       </div>
       <p><a href="./index.html" style="color:#fff">← ゲーム一覧へ戻る</a></p>
     </div>
@@ -48,6 +48,10 @@ select{width:100%;padding:12px;border-radius:10px;border:1px solid #39404d;backg
 </section>
 
 <section id="controller" class="hidden">
+  <div style="height:42vh;min-height:260px;background:#080b0f;position:relative;border-bottom:1px solid #333">
+    <canvas id="spectatorCanvas2" style="width:100%;height:100%;display:block"></canvas>
+    <div style="position:absolute;left:10px;top:10px;background:rgba(0,0,0,.6);padding:6px 9px;border-radius:8px;font-size:12px">ゲーム画面</div>
+  </div>
   <div class="panel">
     <h2>スマホコントローラー</h2>
     <div id="joinCard" class="card">
@@ -148,6 +152,7 @@ function connect(retry=false){
       connectStatus.textContent='接続済み'; await wake(); if(sensorActive)ensureSensor();
     });
     cConn.on('data',d=>{
+      if(d?.type==='state')drawSpectator2(d);
       if(d?.type==='reject'){if(retry){setTimeout(()=>connect(true),1200)}else alert(d.message||'番号使用中')}
       if(d?.type==='fall')tilt.textContent='穴に落下！スタートへ戻ります';
       if(d?.type==='goal')tilt.textContent='GOAL！';
@@ -168,6 +173,22 @@ sensorBtn.onclick=async()=>{
 recalibrateBtn.onclick=()=>{baseGamma=rawGamma;baseBeta=rawBeta};
 document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'){await wake();if(sensorActive)ensureSensor();if(!cConn?.open&&selectedNumber)setTimeout(()=>connect(true),600)}});
 
+
+const spectatorCanvas2=document.getElementById('spectatorCanvas2');
+function drawSpectator2(d){
+  if(!spectatorCanvas2||!d)return;
+  const r=spectatorCanvas2.getBoundingClientRect(),dp=Math.min(devicePixelRatio||1,2);
+  spectatorCanvas2.width=Math.max(1,Math.round(r.width*dp));spectatorCanvas2.height=Math.max(1,Math.round(r.height*dp));
+  const g=spectatorCanvas2.getContext('2d');g.setTransform(dp,0,0,dp,0,0);
+  const w=r.width,h=r.height,sc=Math.min(w/1000,h/650),ox=(w-1000*sc)/2,oy=(h-650*sc)/2;
+  g.fillStyle='#0a0d12';g.fillRect(0,0,w,h);g.save();g.translate(ox,oy);g.scale(sc,sc);
+  g.fillStyle='#d7cfb3';g.fillRect(0,0,1000,650);
+  g.fillStyle='#b6e3b6';g.fillRect(870,40,95,95);g.fillStyle='#d9e5ff';g.fillRect(35,520,100,95);
+  g.fillStyle='#4f5968';for(const q of d.walls||[])g.fillRect(q.x,q.y,q.w,q.h);
+  for(const q of d.holes||[]){g.beginPath();g.arc(q.x,q.y,q.r,0,Math.PI*2);g.fillStyle='#090909';g.fill()}
+  for(const p of d.players||[]){if(p.goal)continue;g.beginPath();g.arc(p.x,p.y,p.r,0,Math.PI*2);g.fillStyle=`hsl(${(p.number-1)*36} 70% 52%)`;g.fill();g.strokeStyle='#111';g.stroke();g.fillStyle='#fff';g.font='700 11px system-ui';g.textAlign='center';g.textBaseline='middle';g.fillText(String(p.number),p.x,p.y)}
+  g.restore();
+}
 let hostInit=false;
 function initHost(){
   if(hostInit)return;hostInit=true;
@@ -284,7 +305,13 @@ function initHost(){
     }
     ctx.restore();
   }
-  function loop(now){const dt=Math.min((now-last)/1000,.033);last=now;update(dt);draw();requestAnimationFrame(loop)}
+  let lastStateSend=0;
+  function broadcastState(now){
+    if(now-lastStateSend<50)return;lastStateSend=now;
+    const state={type:'state',walls,holes,players:[...players.values()].map(p=>({number:p.number,x:p.x,y:p.y,r:p.r,goal:p.goal}))};
+    for(const c of conns.values())if(c.open)c.send(state);
+  }
+  function loop(now){const dt=Math.min((now-last)/1000,.033);last=now;update(dt);draw();broadcastState(now);requestAnimationFrame(loop)}
   resetBtn.onclick=resetAll;
   startBtn.onclick=()=>{finishers.length=0;for(const p of players.values())resetPlayer(p);ranking.textContent='ゴール：なし';running=true;overlayTitle.textContent='START!';overlayText.textContent='';overlay.style.display='flex';setTimeout(()=>overlay.style.display='none',700)};
   addEventListener('resize',resize);resize();requestAnimationFrame(loop);
